@@ -1,8 +1,10 @@
 import { useState } from "react";
+import { Eye } from "lucide-react";
 import { Loader, PageHeader } from "../components/layout";
-import { Card, CardBody, CardHeader } from "../components/ui/card";
+import { Card, CardBody } from "../components/ui/card";
 import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
+import { ContentDetailDialog } from "../components/content-detail";
 import { useActiveClient } from "../components/active-client";
 import { useContent, useDecideContent } from "../queries/content";
 import {
@@ -14,7 +16,7 @@ import {
 } from "@/lib/labels";
 import type { ContentRow } from "@/types/dcc";
 
-function ApprovalRow({ item }: { item: ContentRow }) {
+function ApprovalRow({ item, onOpen }: { item: ContentRow; onOpen: () => void }) {
   const decide = useDecideContent();
   const [note, setNote] = useState("");
   const pending = decide.isPending && decide.variables?.id === item.id;
@@ -24,6 +26,7 @@ function ApprovalRow({ item }: { item: ContentRow }) {
       <CardBody>
         <div className="flex flex-wrap items-center gap-2">
           <Badge tone="primary">{item.type}</Badge>
+          {item.channel ? <Badge tone="neutral">{item.channel}</Badge> : null}
           <Badge tone="neutral">{stageLabels[item.stage as Stage] ?? item.stage}</Badge>
           <Badge tone={approvalTones[item.approvalState] ?? "neutral"}>
             {approvalLabels[item.approvalState] ?? item.approvalState}
@@ -55,8 +58,15 @@ function ApprovalRow({ item }: { item: ContentRow }) {
           </div>
         </div>
 
+        {item.hook ? (
+          <div className="mt-4 rounded-md bg-surface-soft/70 px-3 py-2.5">
+            <p className="dcc-label">Hook</p>
+            <p className="mt-1 text-[13px] text-foreground">{item.hook}</p>
+          </div>
+        ) : null}
+
         {item.note ? (
-          <p className="mt-4 rounded-md bg-surface-soft/70 px-3 py-2.5 text-[13px] text-muted-foreground">
+          <p className="mt-3 rounded-md bg-surface-soft/70 px-3 py-2.5 text-[13px] text-muted-foreground">
             {item.note}
           </p>
         ) : null}
@@ -111,6 +121,10 @@ function ApprovalRow({ item }: { item: ContentRow }) {
           >
             Rechazar
           </Button>
+          <Button variant="ghost" onClick={onOpen}>
+            <Eye className="size-4" />
+            Abrir contenido + historial
+          </Button>
           {item.realityStatus === "Dato por confirmar" ? (
             <Button
               variant="ghost"
@@ -127,14 +141,15 @@ function ApprovalRow({ item }: { item: ContentRow }) {
 }
 
 function AprobacionesPage() {
-  const { clientId } = useActiveClient();
-  const content = useContent(clientId);
+  const { clientId, cycleId } = useActiveClient();
+  const content = useContent(clientId, cycleId);
+  const [openId, setOpenId] = useState<number | null>(null);
 
-  if (content.isLoading || !content.data) {
+  if (!cycleId || content.isLoading || !content.data) {
     return (
       <>
         <PageHeader title="Aprobaciones" />
-        <Loader />
+        <Loader label={cycleId ? "Cargando aprobaciones…" : "Seleccionando ciclo…"} />
       </>
     );
   }
@@ -151,7 +166,7 @@ function AprobacionesPage() {
     <>
       <PageHeader
         title="Aprobaciones"
-        description="Decisiones humanas pendientes. Nada se publica sin pasar por aquí."
+        description="Decisiones humanas pendientes. Cada decisión queda registrada en el historial."
       />
 
       <div className="space-y-4">
@@ -163,33 +178,35 @@ function AprobacionesPage() {
           </Card>
         ) : null}
         {pending.map((item) => (
-          <ApprovalRow key={item.id} item={item} />
+          <ApprovalRow key={item.id} item={item} onOpen={() => setOpenId(item.id)} />
         ))}
       </div>
 
       {decided.length > 0 ? (
-        <Card className="mt-6">
-          <CardHeader title="Decisiones recientes" subtitle="Historial del ciclo." />
-          <CardBody className="space-y-2">
+        <div className="mt-8">
+          <p className="dcc-label mb-3">Decisiones recientes del ciclo</p>
+          <div className="space-y-2">
             {decided.map((item) => (
-              <div
+              <button
                 key={item.id}
-                className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-border px-4 py-3"
+                type="button"
+                onClick={() => setOpenId(item.id)}
+                className="flex w-full flex-wrap items-center justify-between gap-3 rounded-md border border-border bg-card px-4 py-3 text-left hover:bg-surface-soft/50"
               >
                 <div>
                   <p className="text-[13.5px] font-semibold text-foreground">{item.title}</p>
-                  <p className="mt-0.5 text-[12.5px] text-muted-foreground">
-                    {item.type} · {item.note || "Sin nota"}
-                  </p>
+                  <p className="mt-0.5 text-[12px] text-muted-foreground">{item.type}</p>
                 </div>
                 <Badge tone={approvalTones[item.approvalState] ?? "neutral"}>
                   {approvalLabels[item.approvalState] ?? item.approvalState}
                 </Badge>
-              </div>
+              </button>
             ))}
-          </CardBody>
-        </Card>
+          </div>
+        </div>
       ) : null}
+
+      {openId ? <ContentDetailDialog id={openId} onClose={() => setOpenId(null)} /> : null}
     </>
   );
 }

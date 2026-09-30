@@ -1,12 +1,18 @@
-import { useState } from "react";
-import { Plus } from "lucide-react";
+import { useMemo, useState } from "react";
+import { Clock3, Plus, Trash2 } from "lucide-react";
 import { Loader, PageHeader } from "../components/layout";
 import { Card, CardBody, CardHeader } from "../components/ui/card";
 import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
 import { AutomationScorePanel, FounderHoursPanel, KpiCard } from "../components/panels";
 import { useActiveClient } from "../components/active-client";
-import { useCreateTask, useHours, useUpdateTask } from "../queries/hours";
+import {
+  useCreateTask,
+  useCreateTimeEntry,
+  useDeleteTimeEntry,
+  useHours,
+  useUpdateTask,
+} from "../queries/hours";
 import {
   classificationLabels,
   classificationTones,
@@ -21,6 +27,16 @@ import type { ManualTaskRow } from "@/types/dcc";
 const classifications = ["automatizable", "estandarizable", "delegable", "founder_only"] as const;
 const priorities = ["alta", "media", "baja"] as const;
 const statuses = ["pendiente", "en_proceso", "resuelto"] as const;
+const categories = [
+  "Estrategia",
+  "Research",
+  "Revisión",
+  "Diseño",
+  "Cliente",
+  "Administración",
+  "Ventas",
+  "Otros",
+] as const;
 
 function Select({
   value,
@@ -48,6 +64,112 @@ function Select({
         </option>
       ))}
     </select>
+  );
+}
+
+function TimeEntryForm({ clientId, cycleId }: { clientId: number; cycleId: number }) {
+  const create = useCreateTimeEntry();
+  const [open, setOpen] = useState(false);
+  const [category, setCategory] = useState<(typeof categories)[number]>("Revisión");
+  const [minutes, setMinutes] = useState("15");
+  const [date, setDate] = useState(() => {
+    const now = new Date();
+    const y = now.getFullYear();
+    const m = String(now.getMonth() + 1).padStart(2, "0");
+    const d = String(now.getDate()).padStart(2, "0");
+    return `${y}-${m}-${d}`;
+  });
+  const [description, setDescription] = useState("");
+
+  return (
+    <>
+      <Button onClick={() => setOpen(true)}>
+        <Clock3 className="size-4" />
+        Registrar tiempo
+      </Button>
+      {open ? (
+        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-foreground/45 px-4 py-8">
+          <Card className="w-full max-w-3xl border-l-[3px] border-l-accent">
+            <CardHeader
+              title="Registrar tiempo"
+              subtitle="Cada entrada alimenta Founder Hours del ciclo actual."
+            />
+            <CardBody className="grid gap-3 md:grid-cols-5">
+              <div>
+                <label className="dcc-label" htmlFor="time-date">Fecha</label>
+                <input
+                  id="time-date"
+                  type="date"
+                  value={date}
+                  onChange={(event) => setDate(event.target.value)}
+                  className="mt-1.5 h-10 w-full rounded-md border border-border bg-card px-3 text-[13px] outline-none"
+                />
+              </div>
+              <div>
+                <label className="dcc-label" htmlFor="time-category">Categoría</label>
+                <select
+                  id="time-category"
+                  value={category}
+                  onChange={(event) => setCategory(event.target.value as (typeof categories)[number])}
+                  className="mt-1.5 h-10 w-full rounded-md border border-border bg-card px-3 text-[13px] outline-none"
+                >
+                  {categories.map((item) => <option key={item} value={item}>{item}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="dcc-label" htmlFor="time-minutes">Minutos</label>
+                <input
+                  id="time-minutes"
+                  type="number"
+                  min={1}
+                  max={1440}
+                  value={minutes}
+                  onChange={(event) => setMinutes(event.target.value)}
+                  className="mt-1.5 h-10 w-full rounded-md border border-border bg-card px-3 text-[13px] outline-none"
+                />
+              </div>
+              <div className="md:col-span-2">
+                <label className="dcc-label" htmlFor="time-description">Descripción</label>
+                <input
+                  id="time-description"
+                  value={description}
+                  onChange={(event) => setDescription(event.target.value)}
+                  placeholder="Ej.: revisión de 4 copies de RUTA"
+                  className="mt-1.5 h-10 w-full rounded-md border border-border bg-card px-3 text-[13px] outline-none"
+                />
+              </div>
+              <div className="flex flex-wrap gap-2 md:col-span-5">
+                <Button
+                  disabled={create.isPending || !date || Number(minutes) < 1}
+                  onClick={() =>
+                    create.mutate(
+                      {
+                        clientId,
+                        cycleId,
+                        category,
+                        minutes: Number(minutes) || 1,
+                        date,
+                        description: description.trim(),
+                      },
+                      {
+                        onSuccess: () => {
+                          setMinutes("15");
+                          setDescription("");
+                          setOpen(false);
+                        },
+                      },
+                    )
+                  }
+                >
+                  {create.isPending ? "Guardando…" : "Guardar tiempo"}
+                </Button>
+                <Button variant="ghost" onClick={() => setOpen(false)}>Cancelar</Button>
+              </div>
+            </CardBody>
+          </Card>
+        </div>
+      ) : null}
+    </>
   );
 }
 
@@ -218,29 +340,43 @@ function TaskRow({ task }: { task: ManualTaskRow }) {
 }
 
 function HoursAutomationPage() {
-  const { clientId } = useActiveClient();
-  const overview = useHours(clientId);
+  const { clientId, cycleId } = useActiveClient();
+  const overview = useHours(clientId, cycleId);
+  const deleteEntry = useDeleteTimeEntry();
 
-  if (overview.isLoading || !overview.data) {
+  const cycleLabel = useMemo(() => overview.data?.cycle.name ?? "ciclo actual", [overview.data]);
+
+  if (!cycleId || overview.isLoading || !overview.data) {
     return (
       <>
         <PageHeader title="Hours & Automation" />
-        <Loader />
+        <Loader label={cycleId ? "Cargando horas…" : "Seleccionando ciclo…"} />
       </>
     );
   }
 
-  const { client, distribution, totalMinutes, targetMinutes, tasks, backlog, recoverableMinutes } =
-    overview.data;
+  const {
+    distribution,
+    totalMinutes,
+    targetMinutes,
+    tasks,
+    backlog,
+    recoverableMinutes,
+    eliminatedMinutes,
+    manualMonthlyMinutes,
+    automation,
+    entries,
+  } = overview.data;
 
   return (
     <>
       <PageHeader
         title="Hours & Automation"
-        description="Cuánto tiempo humano consume el cliente y qué deberíamos automatizar después."
+        description={`Tiempo humano real y oportunidades de automatización · ${cycleLabel}.`}
+        action={<TimeEntryForm clientId={clientId} cycleId={cycleId} />}
       />
 
-      <div className="mb-5 grid gap-3 sm:grid-cols-3">
+      <div className="mb-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <KpiCard
           label="Founder Hours del ciclo"
           value={formatMinutes(totalMinutes)}
@@ -250,12 +386,18 @@ function HoursAutomationPage() {
           label="Horas recuperables"
           value={formatMinutes(recoverableMinutes)}
           tone="accent"
-          hint="Según el backlog de automatización"
+          hint="Tareas activas no Founder Only"
         />
         <KpiCard
-          label="Tareas manuales activas"
-          value={String(tasks.filter((t) => t.status !== "resuelto").length)}
+          label="Horas ya eliminadas"
+          value={formatMinutes(eliminatedMinutes)}
+          hint="Carga resuelta por automatización/estandarización"
+        />
+        <KpiCard
+          label="Carga manual estimada"
+          value={formatMinutes(manualMonthlyMinutes)}
           tone="warning"
+          hint="Minutos mensuales que aún dependen del flujo actual"
         />
       </div>
 
@@ -266,17 +408,58 @@ function HoursAutomationPage() {
           targetMinutes={targetMinutes}
         />
         <AutomationScorePanel
-          automated={client.automationScore}
-          standardized={client.standardizedScore}
-          manual={client.manualScore}
+          automated={automation.automated}
+          standardized={automation.standardized}
+          manual={automation.manual}
           tasks={tasks.slice(0, 4)}
         />
       </div>
 
       <Card className="mt-5">
+        <CardHeader title="Registro de tiempo" subtitle="Entradas reales del ciclo; ya no son números mock." />
+        <CardBody className="space-y-2">
+          {entries.length === 0 ? (
+            <p className="text-[13.5px] text-muted-foreground">Todavía no hay tiempo registrado.</p>
+          ) : (
+            entries
+              .slice()
+              .reverse()
+              .map((entry) => (
+                <div
+                  key={entry.id}
+                  className="flex flex-wrap items-center gap-3 rounded-md border border-border px-4 py-3"
+                >
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Badge tone="neutral">{entry.category}</Badge>
+                      <span className="text-[12px] text-muted-foreground">{entry.date}</span>
+                    </div>
+                    {entry.description ? (
+                      <p className="mt-1.5 text-[13px] text-foreground">{entry.description}</p>
+                    ) : null}
+                  </div>
+                  <span className="dcc-num font-display text-[16px] font-bold text-foreground">
+                    {formatMinutes(entry.minutes)}
+                  </span>
+                  <button
+                    type="button"
+                    aria-label="Eliminar registro"
+                    disabled={deleteEntry.isPending}
+                    onClick={() => deleteEntry.mutate({ id: entry.id })}
+                    className="rounded-md border border-border p-2 text-muted-foreground hover:bg-surface-soft disabled:opacity-50"
+                  >
+                    <Trash2 className="size-3.5" />
+                  </button>
+                </div>
+              ))
+          )}
+        </CardBody>
+      </Card>
+
+      <Card className="mt-5">
         <CardHeader
           title="Manual Tasks Tracker"
-          subtitle="Cada tarea humana, su coste mensual y su clasificación."
+          subtitle="El Automation Score se calcula desde estas tareas; ya no es un porcentaje arbitrario."
           action={<NewTaskForm clientId={clientId} />}
         />
         <CardBody className="dcc-scroll overflow-x-auto">
@@ -304,12 +487,12 @@ function HoursAutomationPage() {
       <Card className="mt-5">
         <CardHeader
           title="Automation Backlog"
-          subtitle="Ordenado por horas potencialmente recuperadas al mes."
+          subtitle="Prioridad práctica: recuperar horas, no coleccionar automatizaciones bonitas."
         />
         <CardBody className="space-y-2">
           {backlog.length === 0 ? (
             <p className="text-[13.5px] text-muted-foreground">
-              No hay tareas candidatas a automatización.
+              No hay tareas candidatas pendientes. Bien ahí 😄
             </p>
           ) : null}
           {backlog.map((item, index) => (

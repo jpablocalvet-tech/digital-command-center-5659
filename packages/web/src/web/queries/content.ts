@@ -2,8 +2,17 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { orpc } from "../lib/api";
 import type { Stage } from "../lib/labels";
 
-export function useContent(clientId: number) {
-  return useQuery(orpc.content.list.queryOptions({ input: { clientId }, enabled: clientId > 0 }));
+export function useContent(clientId: number, cycleId: number) {
+  return useQuery(
+    orpc.content.list.queryOptions({
+      input: { clientId, cycleId },
+      enabled: clientId > 0 && cycleId > 0,
+    }),
+  );
+}
+
+export function useContentDetail(id: number) {
+  return useQuery(orpc.content.detail.queryOptions({ input: { id }, enabled: id > 0 }));
 }
 
 function useContentInvalidation() {
@@ -15,10 +24,10 @@ function useContentInvalidation() {
   };
 }
 
-export function useSetStage(clientId: number) {
+export function useSetStage(clientId: number, cycleId: number) {
   const queryClient = useQueryClient();
   const invalidate = useContentInvalidation();
-  const listKey = orpc.content.list.queryOptions({ input: { clientId } }).queryKey;
+  const listKey = orpc.content.list.queryOptions({ input: { clientId, cycleId } }).queryKey;
 
   return useMutation(
     orpc.content.setStage.mutationOptions({
@@ -38,6 +47,11 @@ export function useSetStage(clientId: number) {
       onSettled: invalidate,
     }),
   );
+}
+
+export function useUpdateContent() {
+  const invalidate = useContentInvalidation();
+  return useMutation(orpc.content.updateDetails.mutationOptions({ onSuccess: invalidate }));
 }
 
 export function useDecideContent() {

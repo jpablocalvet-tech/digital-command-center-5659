@@ -1,9 +1,10 @@
 import { z } from "zod";
-import { asc, eq } from "drizzle-orm";
+import { asc, eq, and } from "drizzle-orm";
 import { ORPCError } from "@orpc/server";
 import { base } from "../__core/app";
 import { db } from "../database";
 import * as schema from "../database/schema";
+import { calculateAutomation } from "../lib/metrics";
 
 const classifications = [
   "automatizable",
@@ -13,48 +14,109 @@ const classifications = [
 ] as const;
 const priorities = ["alta", "media", "baja"] as const;
 const statuses = ["pendiente", "en_proceso", "resuelto"] as const;
+const categories = [
+  "Estrategia",
+  "Research",
+  "Revisión",
+  "Diseño",
+  "Cliente",
+  "Administración",
+  "Ventas",
+  "Otros",
+] as const;
 
 export const hours = {
-  /** Founder Hours + Manual Tasks Tracker + Automation Backlog de un cliente. */
-  overview: base.input(z.object({ clientId: z.number() })).handler(async ({ input }) => {
-    const [client] = await db
-      .select()
-      .from(schema.clients)
-      .where(eq(schema.clients.id, input.clientId));
-    if (!client) throw new ORPCError("NOT_FOUND", { message: "Cliente no encontrado" });
-
-    const [distribution, tasks] = await Promise.all([
-      db
+  /** Founder Hours reales + Manual Tasks + Automation Backlog por cliente/ciclo. */
+  overview: base
+    .input(z.object({ clientId: z.number(), cycleId: z.number() }))
+    .handler(async ({ input }) => {
+      const [client] = await db
         .select()
-        .from(schema.founderHours)
-        .where(eq(schema.founderHours.clientId, client.id))
-        .orderBy(asc(schema.founderHours.id)),
-      db
+        .from(schema.clients)
+        .where(eq(schema.clients.id, input.clientId));
+      if (!client) throw new ORPCError("NOT_FOUND", { message: "Cliente no encontrado" });
+
+      const [cycle] = await db
         .select()
-        .from(schema.manualTasks)
-        .where(eq(schema.manualTasks.clientId, client.id))
-        .orderBy(asc(schema.manualTasks.id)),
-    ]);
+        .from(schema.contentCycles)
+        .where(
+          and(
+            eq(schema.contentCycles.id, input.cycleId),
+            eq(schema.contentCycles.clientId, client.id),
+          ),
+        );
+      if (!cycle) throw new ORPCError("NOT_FOUND", { message: "Ciclo no encontrado" });
 
-    const backlog = tasks
-      .filter((t) => t.classification !== "founder_only" && t.status !== "resuelto")
-      .map((t) => ({ ...t, recoverableMinutes: t.minutes * t.timesPerMonth }))
-      .sort((a, b) => b.recoverableMinutes - a.recoverableMinutes);
+      const [entries, tasks] = await Promise.all([
+        db
+          .select()
+          .from(schema.timeEntries)
+          .where(
+            and(
+              eq(schema.timeEntries.clientId, client.id),
+              eq(schema.timeEntries.cycleId, cycle.id),
+            ),
+          )
+          .orderBy(asc(schema.timeEntries.date), asc(schema.timeEntries.id)),
+        db
+          .select()
+          .from(schema.manualTasks)
+          .where(eq(schema.manualTasks.clientId, client.id))
+          .orderBy(asc(schema.manualTasks.id)),
+      ]);
 
-    return {
-      client,
-      distribution,
-      totalMinutes: distribution.reduce((total, d) => total + d.minutes, 0),
-      targetMinutes: 240,
-      tasks,
-      backlog,
-      recoverableMinutes: backlog.reduce((total, t) => total + t.recoverableMinutes, 0),
-      automation: {
-        automated: client.automationScore,
-        standardized: client.standardizedScore,
-        manual: client.manualScore,
-      },
-    };
+      const distribution = Object.entries(
+        entries.reduce<Record<string, number>>((acc, entry) => {
+          acc[entry.category] = (acc[entry.category] ?? 0) + entry.minutes;
+          return acc;
+        }, {}),
+      ).map(([category, minutes], index) => ({ id: index + 1, category, minutes }));
+
+      const automation = calculateAutomation(tasks);
+      const backlog = tasks
+        .filter((task) => task.classification !== "founder_only" && task.status !== "resuelto")
+        .map((task) => ({ ...task, recoverableMinutes: task.minutes * task.timesPerMonth }))
+        .sort((a, b) => b.recoverableMinutes - a.recoverableMinutes);
+
+      return {
+        client,
+        cycle,
+        entries,
+        distribution,
+        totalMinutes: entries.reduce((total, entry) => total + entry.minutes, 0),
+        targetMinutes: 240,
+        tasks,
+        backlog,
+        recoverableMinutes: automation.recoverableMinutes,
+        eliminatedMinutes: automation.eliminatedMinutes,
+        manualMonthlyMinutes: automation.manualMinutes,
+        automation,
+      };
+    }),
+
+  createTimeEntry: base
+    .input(
+      z.object({
+        clientId: z.number(),
+        cycleId: z.number(),
+        category: z.enum(categories),
+        minutes: z.number().int().min(1).max(24 * 60),
+        date: z.string().min(10),
+        description: z.string().default(""),
+      }),
+    )
+    .handler(async ({ input }) => {
+      const [created] = await db.insert(schema.timeEntries).values(input).returning();
+      return created;
+    }),
+
+  deleteTimeEntry: base.input(z.object({ id: z.number() })).handler(async ({ input }) => {
+    const [deleted] = await db
+      .delete(schema.timeEntries)
+      .where(eq(schema.timeEntries.id, input.id))
+      .returning();
+    if (!deleted) throw new ORPCError("NOT_FOUND", { message: "Registro no encontrado" });
+    return deleted;
   }),
 
   updateTask: base

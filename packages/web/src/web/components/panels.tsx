@@ -332,7 +332,7 @@ export function AutomationScorePanel({
     <Card>
       <CardHeader
         title="Automation Score"
-        subtitle="Qué parte del servicio ya no depende de manos humanas."
+        subtitle="Distribución de la carga mensual: automatizada, estandarizada/delegada y todavía manual."
       />
       <CardBody>
         <div className="flex h-3 overflow-hidden rounded-full">
@@ -404,7 +404,7 @@ export function IntegrationsStrip() {
     <Card>
       <CardHeader
         title="Conexiones futuras"
-        subtitle="Preparado para conectar más adelante. Nada de esto está activo en V0.1."
+        subtitle="Preparado para conectar más adelante. Nada de esto está activo en V0.2."
       />
       <CardBody className="flex flex-wrap gap-2">
         {integrations.map((name) => (

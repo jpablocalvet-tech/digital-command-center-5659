@@ -8,10 +8,10 @@ import { agentStatusLabels } from "@/lib/labels";
 const legend = ["esperando", "trabajando", "completado", "revision", "bloqueado"];
 
 function AiTeamPage() {
-  const { clientId } = useActiveClient();
-  const team = useTeam(clientId);
+  const { clientId, cycleId } = useActiveClient();
+  const team = useTeam(clientId, cycleId);
 
-  if (team.isLoading || !team.data) {
+  if (!cycleId || team.isLoading || !team.data) {
     return (
       <>
         <PageHeader title="AI Marketing Team" />
@@ -34,7 +34,7 @@ function AiTeamPage() {
             <span key={status}>{agentStatusLabels[status]}</span>
           ))}
           <span className="ml-auto text-[12px]">
-            V0.1: estados de referencia, sin ejecución de IA real.
+            V0.2: estados de referencia por ciclo; la IA real entra en V0.3.
           </span>
         </CardBody>
       </Card>

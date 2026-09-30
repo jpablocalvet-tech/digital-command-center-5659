@@ -1,9 +1,10 @@
 import { z } from "zod";
-import { asc, eq } from "drizzle-orm";
+import { asc, eq, and } from "drizzle-orm";
 import { ORPCError } from "@orpc/server";
 import { base } from "../__core/app";
 import { db } from "../database";
 import * as schema from "../database/schema";
+import { calculateAutomation } from "../lib/metrics";
 
 async function loadClient(id: number) {
   const [client] = await db.select().from(schema.clients).where(eq(schema.clients.id, id));
@@ -11,88 +12,301 @@ async function loadClient(id: number) {
   return client;
 }
 
+async function loadCycle(clientId: number, cycleId?: number) {
+  if (cycleId) {
+    const [cycle] = await db
+      .select()
+      .from(schema.contentCycles)
+      .where(
+        and(eq(schema.contentCycles.id, cycleId), eq(schema.contentCycles.clientId, clientId)),
+      );
+    if (!cycle) throw new ORPCError("NOT_FOUND", { message: "Ciclo no encontrado" });
+    return cycle;
+  }
+
+  const [active] = await db
+    .select()
+    .from(schema.contentCycles)
+    .where(
+      and(eq(schema.contentCycles.clientId, clientId), eq(schema.contentCycles.status, "Activo")),
+    );
+  if (active) return active;
+
+  const cycles = await db
+    .select()
+    .from(schema.contentCycles)
+    .where(eq(schema.contentCycles.clientId, clientId))
+    .orderBy(asc(schema.contentCycles.startDate));
+  const fallback = cycles.length ? cycles[cycles.length - 1] : undefined;
+  if (!fallback) throw new ORPCError("NOT_FOUND", { message: "El cliente todavía no tiene ciclos" });
+  return fallback;
+}
+
+const pipelineMeta = [
+  ["idea", "Idea"],
+  ["research", "Research"],
+  ["copy", "Copy"],
+  ["diseno", "Diseño"],
+  ["quality", "Quality Check"],
+  ["aprobacion", "Aprobación"],
+  ["programado", "Programado"],
+  ["publicado", "Publicado"],
+] as const;
+
+function dynamicAttention(
+  content: (typeof schema.contentItems.$inferSelect)[],
+  tasks: (typeof schema.manualTasks.$inferSelect)[],
+) {
+  const rows: {
+    id: number;
+    priority: string;
+    title: string;
+    detail: string;
+    link: string;
+    linkLabel: string;
+  }[] = [];
+  let id = -1;
+
+  const ready = content.filter((item) => item.approvalState === "listo").length;
+  if (ready > 0) {
+    rows.push({
+      id: id--,
+      priority: "critico",
+      title: `${ready} ${ready === 1 ? "contenido listo" : "contenidos listos"} para aprobación`,
+      detail: "Hay piezas que ya pasaron revisión y esperan una decisión humana.",
+      link: "/aprobaciones",
+      linkLabel: "Ir a Aprobaciones",
+    });
+  }
+
+  const confirmations = content.filter(
+    (item) =>
+      item.approvalState === "dato_por_confirmar" || item.realityStatus === "Dato por confirmar",
+  ).length;
+  if (confirmations > 0) {
+    rows.push({
+      id: id--,
+      priority: "atencion",
+      title: `${confirmations} ${confirmations === 1 ? "pieza requiere" : "piezas requieren"} confirmar datos`,
+      detail: "Reality Checker detectó afirmaciones o datos que deben validarse antes de publicar.",
+      link: "/aprobaciones",
+      linkLabel: "Revisar dato",
+    });
+  }
+
+  const automationCandidates = tasks
+    .filter((task) => task.classification !== "founder_only" && task.status !== "resuelto")
+    .map((task) => ({ ...task, monthly: task.minutes * task.timesPerMonth }))
+    .sort((a, b) => b.monthly - a.monthly);
+
+  if (automationCandidates[0]) {
+    const top = automationCandidates[0];
+    rows.push({
+      id: id--,
+      priority: "informativo",
+      title: "Oportunidad de recuperar tiempo",
+      detail: `${top.task}: ${top.monthly} min/mes potencialmente recuperables.`,
+      link: "/hours-automation",
+      linkLabel: "Ver backlog",
+    });
+  }
+
+  return rows;
+}
+
 export const clients = {
-  /** Lista para el selector superior y la pantalla de Clientes. */
+  /** Lista para selector y pantalla de clientes, con métricas derivadas. */
   list: base.handler(async () => {
     const rows = await db.select().from(schema.clients).orderBy(asc(schema.clients.id));
-    const hours = await db.select().from(schema.founderHours);
-    return rows.map((client) => ({
-      ...client,
-      founderMinutes: hours
-        .filter((h) => h.clientId === client.id)
-        .reduce((total, h) => total + h.minutes, 0),
-    }));
-  }),
-
-  get: base.input(z.object({ id: z.number() })).handler(async ({ input }) => {
-    const client = await loadClient(input.id);
-    const hours = await db
-      .select()
-      .from(schema.founderHours)
-      .where(eq(schema.founderHours.clientId, client.id));
-    return {
-      ...client,
-      founderMinutes: hours.reduce((total, h) => total + h.minutes, 0),
-    };
-  }),
-
-  /** Todo lo que necesita la pantalla Inicio en una sola llamada. */
-  dashboard: base.input(z.object({ clientId: z.number() })).handler(async ({ input }) => {
-    const client = await loadClient(input.clientId);
-    const [attention, content, pipeline, agents, hours, tasks] = await Promise.all([
-      db
-        .select()
-        .from(schema.attentionItems)
-        .where(eq(schema.attentionItems.clientId, client.id))
-        .orderBy(asc(schema.attentionItems.id)),
-      db
-        .select()
-        .from(schema.contentItems)
-        .where(eq(schema.contentItems.clientId, client.id))
-        .orderBy(asc(schema.contentItems.id)),
-      db
-        .select()
-        .from(schema.pipelineStages)
-        .where(eq(schema.pipelineStages.clientId, client.id))
-        .orderBy(asc(schema.pipelineStages.position)),
-      db
-        .select()
-        .from(schema.agents)
-        .where(eq(schema.agents.clientId, client.id))
-        .orderBy(asc(schema.agents.position)),
-      db
-        .select()
-        .from(schema.founderHours)
-        .where(eq(schema.founderHours.clientId, client.id))
-        .orderBy(asc(schema.founderHours.id)),
-      db
-        .select()
-        .from(schema.manualTasks)
-        .where(eq(schema.manualTasks.clientId, client.id))
-        .orderBy(asc(schema.manualTasks.id)),
+    const [entries, tasks, cycles] = await Promise.all([
+      db.select().from(schema.timeEntries),
+      db.select().from(schema.manualTasks),
+      db.select().from(schema.contentCycles),
     ]);
 
-    const founderMinutes = hours.reduce((total, h) => total + h.minutes, 0);
-    const readyForApproval = content.filter(
-      (c) => c.approvalState === "listo" || c.approvalState === "dato_por_confirmar",
-    ).length;
-
-    return {
-      client: { ...client, founderMinutes },
-      attention,
-      content,
-      pipeline,
-      agents,
-      hours,
-      tasks,
-      kpis: {
-        cycleContent: content.length,
-        readyForApproval,
-        scheduled: content.filter((c) => c.stage === "programado").length,
-        leads: client.leads,
-        founderMinutes,
-        automationScore: client.automationScore,
-      },
-    };
+    return rows.map((client) => {
+      const activeCycle =
+        cycles.find((cycle) => cycle.clientId === client.id && cycle.status === "Activo") ??
+        (() => {
+          const clientCycles = cycles.filter((cycle) => cycle.clientId === client.id);
+          return clientCycles.length ? clientCycles[clientCycles.length - 1] : undefined;
+        })();
+      const cycleEntries = activeCycle
+        ? entries.filter((entry) => entry.clientId === client.id && entry.cycleId === activeCycle.id)
+        : [];
+      const automation = calculateAutomation(tasks.filter((task) => task.clientId === client.id));
+      return {
+        ...client,
+        founderMinutes: cycleEntries.reduce((total, entry) => total + entry.minutes, 0),
+        automationScore: automation.automated,
+        standardizedScore: automation.standardized,
+        manualScore: automation.manual,
+        activeCycleId: activeCycle?.id ?? null,
+        activeCycleName: activeCycle?.name ?? "Sin ciclo",
+        activeCycleObjective: activeCycle?.objective ?? client.objective,
+      };
+    });
   }),
+
+  get: base
+    .input(z.object({ id: z.number(), cycleId: z.number().optional() }))
+    .handler(async ({ input }) => {
+      const client = await loadClient(input.id);
+      const cycle = await loadCycle(client.id, input.cycleId);
+      const [entries, tasks] = await Promise.all([
+        db
+          .select()
+          .from(schema.timeEntries)
+          .where(
+            and(
+              eq(schema.timeEntries.clientId, client.id),
+              eq(schema.timeEntries.cycleId, cycle.id),
+            ),
+          ),
+        db.select().from(schema.manualTasks).where(eq(schema.manualTasks.clientId, client.id)),
+      ]);
+      const automation = calculateAutomation(tasks);
+      return {
+        ...client,
+        founderMinutes: entries.reduce((total, entry) => total + entry.minutes, 0),
+        automationScore: automation.automated,
+        standardizedScore: automation.standardized,
+        manualScore: automation.manual,
+        cycle,
+      };
+    }),
+
+  updateBrand: base
+    .input(
+      z.object({
+        id: z.number(),
+        brandVoice: z.string(),
+        brandPillars: z.string(),
+        brandColors: z.string(),
+        brandNotes: z.string(),
+        brandUseWords: z.string(),
+        brandAvoidWords: z.string(),
+        allowedPromises: z.string(),
+        communicationRestrictions: z.string(),
+      }),
+    )
+    .handler(async ({ input }) => {
+      const { id, ...patch } = input;
+      const [updated] = await db
+        .update(schema.clients)
+        .set(patch)
+        .where(eq(schema.clients.id, id))
+        .returning();
+      if (!updated) throw new ORPCError("NOT_FOUND", { message: "Cliente no encontrado" });
+      return updated;
+    }),
+
+  /** Todo lo necesario para Inicio, derivado de datos reales del ciclo. */
+  dashboard: base
+    .input(z.object({ clientId: z.number(), cycleId: z.number().optional() }))
+    .handler(async ({ input }) => {
+      const client = await loadClient(input.clientId);
+      const cycle = await loadCycle(client.id, input.cycleId);
+      const [manualAttention, content, agents, entries, tasks] = await Promise.all([
+        db
+          .select()
+          .from(schema.attentionItems)
+          .where(eq(schema.attentionItems.clientId, client.id))
+          .orderBy(asc(schema.attentionItems.id)),
+        db
+          .select()
+          .from(schema.contentItems)
+          .where(
+            and(
+              eq(schema.contentItems.clientId, client.id),
+              eq(schema.contentItems.cycleId, cycle.id),
+            ),
+          )
+          .orderBy(asc(schema.contentItems.id)),
+        db
+          .select()
+          .from(schema.agents)
+          .where(
+            and(eq(schema.agents.clientId, client.id), eq(schema.agents.cycleId, cycle.id)),
+          )
+          .orderBy(asc(schema.agents.position)),
+        db
+          .select()
+          .from(schema.timeEntries)
+          .where(
+            and(
+              eq(schema.timeEntries.clientId, client.id),
+              eq(schema.timeEntries.cycleId, cycle.id),
+            ),
+          )
+          .orderBy(asc(schema.timeEntries.id)),
+        db
+          .select()
+          .from(schema.manualTasks)
+          .where(eq(schema.manualTasks.clientId, client.id))
+          .orderBy(asc(schema.manualTasks.id)),
+      ]);
+
+      const founderMinutes = entries.reduce((total, entry) => total + entry.minutes, 0);
+      const readyForApproval = content.filter(
+        (item) => item.approvalState === "listo" || item.approvalState === "dato_por_confirmar",
+      ).length;
+      const automation = calculateAutomation(tasks);
+
+      const pipeline = pipelineMeta.map(([stage, name], index) => ({
+        id: index + 1,
+        position: index + 1,
+        name,
+        count: content.filter((item) => item.stage === stage).length,
+      }));
+
+      const attention = [
+        ...dynamicAttention(content, tasks),
+        ...manualAttention
+          .filter((item) => item.cycleId === null || item.cycleId === cycle.id)
+          .map((item) => ({
+            id: item.id,
+            priority: item.priority,
+            title: item.title,
+            detail: item.detail,
+            link: item.link,
+            linkLabel: item.linkLabel,
+          })),
+      ];
+
+      const distribution = Object.entries(
+        entries.reduce<Record<string, number>>((acc, entry) => {
+          acc[entry.category] = (acc[entry.category] ?? 0) + entry.minutes;
+          return acc;
+        }, {}),
+      ).map(([category, minutes], index) => ({ id: index + 1, category, minutes }));
+
+      return {
+        client: {
+          ...client,
+          founderMinutes,
+          automationScore: automation.automated,
+          standardizedScore: automation.standardized,
+          manualScore: automation.manual,
+        },
+        cycle,
+        attention,
+        content,
+        pipeline,
+        agents,
+        hours: distribution,
+        tasks,
+        automation,
+        kpis: {
+          cycleContent: content.length,
+          targetContent: cycle.targetContentCount,
+          readyForApproval,
+          scheduled: content.filter((item) => item.stage === "programado").length,
+          published: content.filter((item) => item.stage === "publicado").length,
+          leads: client.leads,
+          founderMinutes,
+          automationScore: automation.automated,
+        },
+      };
+    }),
 };

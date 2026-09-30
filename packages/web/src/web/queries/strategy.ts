@@ -1,8 +1,13 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { orpc } from "../lib/api";
 
-export function useStrategy(clientId: number) {
-  return useQuery(orpc.strategy.get.queryOptions({ input: { clientId }, enabled: clientId > 0 }));
+export function useStrategy(clientId: number, cycleId: number) {
+  return useQuery(
+    orpc.strategy.get.queryOptions({
+      input: { clientId, cycleId },
+      enabled: clientId > 0 && cycleId > 0,
+    }),
+  );
 }
 
 export function useSaveStrategy() {

@@ -39,11 +39,11 @@ function ClientesPage() {
               <h2 className="mt-3 font-display text-[18px] font-bold text-foreground">
                 {client.name}
               </h2>
-              <p className="mt-1 text-[13px] text-muted-foreground">Objetivo: {client.objective}</p>
+              <p className="mt-1 text-[13px] text-muted-foreground">Objetivo: {client.activeCycleObjective ?? client.objective}</p>
 
               <div className="mt-4 grid grid-cols-2 gap-3 border-t border-border pt-4">
                 <div>
-                  <p className="dcc-label">Founder Hours</p>
+                  <p className="dcc-label">Founder Hours · ciclo activo</p>
                   <p className="dcc-num mt-1 font-display text-[18px] font-bold text-foreground">
                     {formatMinutes(client.founderMinutes ?? 0)}
                   </p>

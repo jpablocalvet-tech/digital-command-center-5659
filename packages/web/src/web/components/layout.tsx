@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Link, useLocation } from "wouter";
 import {
   Bot,
+  CalendarRange,
   CheckSquare,
   ChevronDown,
   Clock,
@@ -30,8 +31,7 @@ function NavLinks({ onNavigate }: { onNavigate?: () => void }) {
   return (
     <nav className="flex flex-col gap-1 px-3">
       {nav.map((item) => {
-        const active =
-          item.href === "/" ? location === "/" : location.startsWith(item.href);
+        const active = item.href === "/" ? location === "/" : location.startsWith(item.href);
         const Icon = item.icon;
         return (
           <Link
@@ -63,40 +63,71 @@ function Brand() {
         Command Center
       </p>
       <p className="mt-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-white/45">
-        V0.1 · Validación
+        V0.2 · Core
       </p>
     </div>
   );
 }
 
-function ClientSwitcher() {
-  const { clients, clientId, setClientId, isLoading } = useActiveClient();
-  const active = clients.find((c) => c.id === clientId);
+function ClientAndCycleSwitcher() {
+  const {
+    clients,
+    clientId,
+    setClientId,
+    isLoading,
+    cycles,
+    cycleId,
+    setCycleId,
+    isCycleLoading,
+  } = useActiveClient();
+  const active = clients.find((client) => client.id === clientId);
 
   return (
-    <div className="flex flex-wrap items-center gap-3">
-      <span className="dcc-label hidden sm:inline">Cliente activo</span>
-      <div className="relative">
-        <select
-          value={clientId || ""}
-          disabled={isLoading}
-          onChange={(event) => setClientId(Number(event.target.value))}
-          className="h-10 appearance-none rounded-md border border-border bg-card pl-3 pr-9 text-[13.5px] font-semibold text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring/30"
-        >
-          {isLoading ? <option value="">Cargando…</option> : null}
-          {clients.map((client) => (
-            <option key={client.id} value={client.id}>
-              {client.name}
-            </option>
-          ))}
-          <option value="" disabled>
-            Todos los clientes (próximamente)
-          </option>
-        </select>
-        <ChevronDown className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+    <div className="flex min-w-0 flex-1 flex-wrap items-center gap-3">
+      <div className="flex items-center gap-2">
+        <span className="dcc-label hidden xl:inline">Cliente</span>
+        <div className="relative">
+          <select
+            value={clientId || ""}
+            disabled={isLoading}
+            onChange={(event) => setClientId(Number(event.target.value))}
+            className="h-10 max-w-[260px] appearance-none rounded-md border border-border bg-card pl-3 pr-9 text-[13.5px] font-semibold text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring/30"
+          >
+            {isLoading ? <option value="">Cargando…</option> : null}
+            {clients.map((client) => (
+              <option key={client.id} value={client.id}>
+                {client.name}
+              </option>
+            ))}
+          </select>
+          <ChevronDown className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+        </div>
       </div>
+
+      <div className="flex items-center gap-2">
+        <CalendarRange className="hidden size-4 text-muted-foreground sm:block" />
+        <span className="dcc-label hidden xl:inline">Ciclo</span>
+        <div className="relative">
+          <select
+            value={cycleId || ""}
+            disabled={isCycleLoading || cycles.length === 0}
+            onChange={(event) => setCycleId(Number(event.target.value))}
+            className="h-10 max-w-[245px] appearance-none rounded-md border border-border bg-card pl-3 pr-9 text-[13px] font-semibold text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring/30 disabled:opacity-50"
+          >
+            {isCycleLoading ? <option value="">Cargando ciclo…</option> : null}
+            {!isCycleLoading && cycles.length === 0 ? <option value="">Sin ciclos</option> : null}
+            {cycles.map((cycle) => (
+              <option key={cycle.id} value={cycle.id}>
+                {cycle.name}{cycle.status === "Activo" ? " · Activo" : ""}
+              </option>
+            ))}
+          </select>
+          <ChevronDown className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+        </div>
+      </div>
+
       {active ? (
-        <span className="hidden rounded-full bg-surface-soft px-2.5 py-1 text-[11.5px] font-semibold text-muted-foreground md:inline">
+        <span className="hidden rounded-full bg-surface-soft px-2.5 py-1 text-[11.5px] font-semibold text-muted-foreground 2xl:inline">
           {active.code}
         </span>
       ) : null}
@@ -152,7 +183,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
           >
             <Menu className="size-4" />
           </button>
-          <ClientSwitcher />
+          <ClientAndCycleSwitcher />
         </header>
         <main className="mx-auto w-full max-w-[1320px] flex-1 px-5 py-6 md:px-8 md:py-8">
           {children}
@@ -178,7 +209,7 @@ export function PageHeader({
           {title}
         </h1>
         {description ? (
-          <p className="mt-1.5 max-w-2xl text-[14px] text-muted-foreground">{description}</p>
+          <p className="mt-1.5 max-w-3xl text-[14px] text-muted-foreground">{description}</p>
         ) : null}
       </div>
       {action}

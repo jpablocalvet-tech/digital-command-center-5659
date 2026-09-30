@@ -1,9 +1,10 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "wouter";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Pencil } from "lucide-react";
 import { Loader, PageHeader } from "../components/layout";
 import { Card, CardBody, CardHeader } from "../components/ui/card";
 import { Badge } from "../components/ui/badge";
+import { Button } from "../components/ui/button";
 import {
   AutomationScorePanel,
   FounderHoursPanel,
@@ -11,7 +12,9 @@ import {
   LearningCard,
   PipelineView,
 } from "../components/panels";
-import { useDashboard } from "../queries/clients";
+import { useActiveClient } from "../components/active-client";
+import { useDashboard, useUpdateBrand } from "../queries/clients";
+import { useCycles } from "../queries/cycles";
 import { useStrategy } from "../queries/strategy";
 import {
   approvalLabels,
@@ -45,14 +48,134 @@ function Field({ label, value }: { label: string; value: string }) {
   );
 }
 
+type BrandValues = {
+  brandVoice: string;
+  brandPillars: string;
+  brandColors: string;
+  brandNotes: string;
+  brandUseWords: string;
+  brandAvoidWords: string;
+  allowedPromises: string;
+  communicationRestrictions: string;
+};
+
+function BrandEditor({ client }: { client: BrandValues & { id: number } }) {
+  const update = useUpdateBrand();
+  const [editing, setEditing] = useState(false);
+  const [values, setValues] = useState<BrandValues>({
+    brandVoice: client.brandVoice,
+    brandPillars: client.brandPillars,
+    brandColors: client.brandColors,
+    brandNotes: client.brandNotes,
+    brandUseWords: client.brandUseWords,
+    brandAvoidWords: client.brandAvoidWords,
+    allowedPromises: client.allowedPromises,
+    communicationRestrictions: client.communicationRestrictions,
+  });
+
+  useEffect(() => {
+    setValues({
+      brandVoice: client.brandVoice,
+      brandPillars: client.brandPillars,
+      brandColors: client.brandColors,
+      brandNotes: client.brandNotes,
+      brandUseWords: client.brandUseWords,
+      brandAvoidWords: client.brandAvoidWords,
+      allowedPromises: client.allowedPromises,
+      communicationRestrictions: client.communicationRestrictions,
+    });
+  }, [client]);
+
+  const labels: { key: keyof BrandValues; label: string; rows: number }[] = [
+    { key: "brandVoice", label: "Tono de voz", rows: 3 },
+    { key: "brandPillars", label: "Pilares de marca", rows: 3 },
+    { key: "brandColors", label: "Colores / identidad", rows: 2 },
+    { key: "brandNotes", label: "Notas", rows: 3 },
+    { key: "brandUseWords", label: "Palabras que usamos", rows: 3 },
+    { key: "brandAvoidWords", label: "Palabras que evitamos", rows: 3 },
+    { key: "allowedPromises", label: "Promesas permitidas", rows: 3 },
+    { key: "communicationRestrictions", label: "Restricciones de comunicación", rows: 3 },
+  ];
+
+  if (!editing) {
+    return (
+      <div className="space-y-4">
+        <div className="flex justify-end">
+          <Button variant="outline" size="sm" onClick={() => setEditing(true)}>
+            <Pencil className="size-4" />
+            Editar Brand Hub
+          </Button>
+        </div>
+        <div className="grid gap-3 md:grid-cols-2">
+          {labels.map((field) => (
+            <Field key={field.key} label={field.label} value={values[field.key]} />
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <Card>
+      <CardHeader
+        title="Editar Brand Hub"
+        subtitle="Este contexto será obligatorio para Brand Guardian cuando conectemos IA real."
+      />
+      <CardBody className="grid gap-4 md:grid-cols-2">
+        {labels.map((field) => (
+          <div key={field.key}>
+            <label className="dcc-label" htmlFor={field.key}>
+              {field.label}
+            </label>
+            <textarea
+              id={field.key}
+              rows={field.rows}
+              value={values[field.key]}
+              onChange={(event) =>
+                setValues((current) => ({ ...current, [field.key]: event.target.value }))
+              }
+              className="mt-1.5 w-full resize-y rounded-md border border-border bg-card px-3 py-2.5 text-[13px] leading-relaxed outline-none"
+            />
+          </div>
+        ))}
+        <div className="flex flex-wrap gap-2 md:col-span-2">
+          <Button
+            disabled={update.isPending}
+            onClick={() =>
+              update.mutate(
+                { id: client.id, ...values },
+                { onSuccess: () => setEditing(false) },
+              )
+            }
+          >
+            {update.isPending ? "Guardando…" : "Guardar Brand Hub"}
+          </Button>
+          <Button variant="ghost" onClick={() => setEditing(false)}>
+            Cancelar
+          </Button>
+        </div>
+      </CardBody>
+    </Card>
+  );
+}
+
 function ClienteHubPage() {
   const params = useParams<{ id: string }>();
   const clientId = Number(params.id);
-  const dashboard = useDashboard(clientId);
-  const strategy = useStrategy(clientId);
+  const active = useActiveClient();
+  const cycles = useCycles(clientId);
+  const pageCycleId = useMemo(() => {
+    if (clientId === active.clientId && active.cycleId) return active.cycleId;
+    const rows = cycles.data ?? [];
+    const last = rows.length ? rows[rows.length - 1] : undefined;
+    return rows.find((cycle) => cycle.status === "Activo")?.id ?? last?.id ?? 0;
+  }, [active.clientId, active.cycleId, clientId, cycles.data]);
+
+  const dashboard = useDashboard(clientId, pageCycleId);
+  const strategy = useStrategy(clientId, pageCycleId);
   const [tab, setTab] = useState<(typeof tabs)[number]>("Resumen");
 
-  if (dashboard.isLoading || !dashboard.data) {
+  if (!pageCycleId || dashboard.isLoading || !dashboard.data) {
     return (
       <>
         <PageHeader title="Client Hub" />
@@ -61,7 +184,7 @@ function ClienteHubPage() {
     );
   }
 
-  const { client, content, pipeline, hours, tasks, kpis } = dashboard.data;
+  const { client, cycle, content, pipeline, hours, tasks, kpis, automation } = dashboard.data;
 
   return (
     <>
@@ -73,7 +196,7 @@ function ClienteHubPage() {
         Volver a Clientes
       </Link>
 
-      <PageHeader title={client.name} description={`${client.code} · ${client.type}`} />
+      <PageHeader title={client.name} description={`${client.code} · ${client.type} · ${cycle.name}`} />
 
       <Card className="mb-5">
         <CardBody className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -83,17 +206,15 @@ function ClienteHubPage() {
           </div>
           <div>
             <p className="dcc-label">Tipo</p>
-            <p className="mt-1 text-[13.5px] font-semibold text-foreground">Cliente interno</p>
+            <p className="mt-1 text-[13.5px] font-semibold text-foreground">{client.type}</p>
           </div>
           <div>
             <p className="dcc-label">Servicio</p>
-            <p className="mt-1 text-[13.5px] font-semibold text-foreground">
-              Sistema de contenido y gestión digital
-            </p>
+            <p className="mt-1 text-[13.5px] font-semibold text-foreground">{client.service}</p>
           </div>
           <div>
-            <p className="dcc-label">Objetivo</p>
-            <p className="mt-1 text-[13.5px] font-semibold text-foreground">{client.objective}</p>
+            <p className="dcc-label">Objetivo del ciclo</p>
+            <p className="mt-1 text-[13.5px] font-semibold text-foreground">{cycle.objective}</p>
           </div>
         </CardBody>
       </Card>
@@ -119,29 +240,26 @@ function ClienteHubPage() {
       {tab === "Resumen" ? (
         <div className="space-y-5">
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            <KpiCard label="Contenidos del ciclo" value={String(kpis.cycleContent)} />
+            <KpiCard label="Contenidos del ciclo" value={`${kpis.cycleContent}/${kpis.targetContent}`} />
             <KpiCard label="Listos para aprobación" value={String(kpis.readyForApproval)} />
             <KpiCard label="Founder Hours" value={formatMinutes(kpis.founderMinutes)} />
-            <KpiCard label="Automation Score" value={`${kpis.automationScore}%`} tone="accent" />
+            <KpiCard label="Automatizado" value={`${automation.automated}%`} tone="accent" />
           </div>
           <PipelineView stages={pipeline} />
           <LearningCard learning={client.learning} />
         </div>
       ) : null}
 
-      {tab === "Marca" ? (
-        <div className="grid gap-3 md:grid-cols-2">
-          <Field label="Tono de voz" value={client.brandVoice} />
-          <Field label="Pilares de marca" value={client.brandPillars} />
-          <Field label="Paleta" value={client.brandColors} />
-          <Field label="Notas" value={client.brandNotes} />
-        </div>
-      ) : null}
+      {tab === "Marca" ? <BrandEditor client={client} /> : null}
 
       {tab === "Objetivos" ? (
         <div className="grid gap-3 md:grid-cols-2">
-          <Field label="Objetivo principal" value={client.objective} />
-          <Field label="Servicio" value={client.service} />
+          <Field label="Prioridad de negocio" value={cycle.businessGoal} />
+          <Field label="Objetivo de marketing del ciclo" value={cycle.objective} />
+          <Field label="Métrica principal" value={cycle.primaryMetric} />
+          <Field label="Baseline" value={cycle.baseline} />
+          <Field label="Target" value={cycle.target} />
+          <Field label="Razonamiento" value={cycle.objectiveRationale} />
           <Field label="Audiencia" value={strategy.data?.audience ?? ""} />
           <Field label="CTA principal" value={strategy.data?.mainCta ?? ""} />
         </div>
@@ -159,7 +277,7 @@ function ClienteHubPage() {
                 <div className="min-w-0">
                   <p className="text-[13.5px] font-semibold text-foreground">{item.title}</p>
                   <p className="mt-0.5 text-[12.5px] text-muted-foreground">
-                    {item.type} · {item.objective}
+                    {item.type} · {item.channel || "Sin canal"} · {item.objective}
                   </p>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
@@ -179,14 +297,13 @@ function ClienteHubPage() {
           <div className="grid gap-3 sm:grid-cols-3">
             <KpiCard label="Leads generados" value={String(client.leads)} />
             <KpiCard label="Programados" value={String(kpis.scheduled)} />
-            <KpiCard label="Publicados" value={String(content.filter((c) => c.stage === "publicado").length)} />
+            <KpiCard label="Publicados" value={String(kpis.published)} />
           </div>
           <Card>
             <CardHeader title="Resultados comerciales" subtitle="Ciclo en curso." />
             <CardBody>
               <p className="text-[13.5px] text-muted-foreground">
-                Todavía no hay contenido publicado, por lo que no hay resultados comerciales que
-                reportar. El éxito de este cliente se mide por solicitudes reales, no por likes.
+                El éxito se medirá por solicitudes cualificadas y conversión, no por likes. Analytics real entra después de validar el núcleo operativo.
               </p>
             </CardBody>
           </Card>
@@ -200,9 +317,9 @@ function ClienteHubPage() {
       {tab === "Automatización" ? (
         <div className="space-y-5">
           <AutomationScorePanel
-            automated={client.automationScore}
-            standardized={client.standardizedScore}
-            manual={client.manualScore}
+            automated={automation.automated}
+            standardized={automation.standardized}
+            manual={automation.manual}
             tasks={tasks.slice(0, 4)}
           />
           <Card>
@@ -216,7 +333,7 @@ function ClienteHubPage() {
                   <div>
                     <p className="text-[13.5px] font-semibold text-foreground">{task.task}</p>
                     <p className="mt-0.5 text-[12.5px] text-muted-foreground">
-                      {task.frequency} · {task.minutes} min
+                      {task.frequency} · {task.minutes} min × {task.timesPerMonth}
                     </p>
                   </div>
                   <Badge tone={classificationTones[task.classification] ?? "neutral"}>

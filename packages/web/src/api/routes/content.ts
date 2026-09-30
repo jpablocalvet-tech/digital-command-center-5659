@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { asc, eq } from "drizzle-orm";
+import { asc, eq, and } from "drizzle-orm";
 import { ORPCError } from "@orpc/server";
 import { base } from "../__core/app";
 import { db } from "../database";
@@ -25,13 +25,64 @@ async function loadItem(id: number) {
 }
 
 export const content = {
-  list: base.input(z.object({ clientId: z.number() })).handler(({ input }) =>
-    db
+  list: base
+    .input(z.object({ clientId: z.number(), cycleId: z.number() }))
+    .handler(({ input }) =>
+      db
+        .select()
+        .from(schema.contentItems)
+        .where(
+          and(
+            eq(schema.contentItems.clientId, input.clientId),
+            eq(schema.contentItems.cycleId, input.cycleId),
+          ),
+        )
+        .orderBy(asc(schema.contentItems.id)),
+    ),
+
+  detail: base.input(z.object({ id: z.number() })).handler(async ({ input }) => {
+    const item = await loadItem(input.id);
+    const events = await db
       .select()
-      .from(schema.contentItems)
-      .where(eq(schema.contentItems.clientId, input.clientId))
-      .orderBy(asc(schema.contentItems.id)),
-  ),
+      .from(schema.approvalEvents)
+      .where(eq(schema.approvalEvents.contentId, item.id))
+      .orderBy(asc(schema.approvalEvents.createdAt), asc(schema.approvalEvents.id));
+    return { item, events };
+  }),
+
+  updateDetails: base
+    .input(
+      z.object({
+        id: z.number(),
+        type: z.string(),
+        title: z.string(),
+        objective: z.string(),
+        cta: z.string(),
+        pillar: z.string(),
+        channel: z.string(),
+        hook: z.string(),
+        body: z.string(),
+        caption: z.string(),
+        visualBrief: z.string(),
+        assetUrl: z.string(),
+        sourceNotes: z.string(),
+        brandReviewNotes: z.string(),
+        realityReviewNotes: z.string(),
+        scheduledLabel: z.string(),
+        scheduledBucket: z.string(),
+        note: z.string(),
+      }),
+    )
+    .handler(async ({ input }) => {
+      const { id, ...patch } = input;
+      await loadItem(id);
+      const [updated] = await db
+        .update(schema.contentItems)
+        .set({ ...patch, updatedAt: new Date() })
+        .where(eq(schema.contentItems.id, id))
+        .returning();
+      return updated;
+    }),
 
   /** Mueve una pieza de fase en el tablero de Producción. */
   setStage: base
@@ -49,7 +100,7 @@ export const content = {
       return updated;
     }),
 
-  /** Decisión humana desde Aprobaciones o Approval Watch. */
+  /** Decisión humana desde Aprobaciones o Approval Watch, con historial inmutable. */
   decide: base
     .input(
       z.object({ id: z.number(), decision: z.enum(decisions), note: z.string().optional() }),
@@ -57,27 +108,32 @@ export const content = {
     .handler(async ({ input }) => {
       const item = await loadItem(input.id);
       const patch: Record<string, unknown> = { updatedAt: new Date() };
+      let eventNote = input.note ?? "";
 
       if (input.decision === "aprobar") {
         patch.approvalState = "aprobado";
         patch.stage = "programado";
         patch.note = input.note ?? "Aprobado por el fundador.";
+        eventNote ||= "Aprobado por el fundador.";
       }
       if (input.decision === "cambios") {
         patch.approvalState = "cambios";
         patch.stage = "copy";
         patch.note = input.note ?? "Cambios solicitados por el fundador.";
+        eventNote ||= "Cambios solicitados por el fundador.";
       }
       if (input.decision === "rechazar") {
         patch.approvalState = "rechazado";
         patch.stage = "idea";
         patch.note = input.note ?? "Rechazado por el fundador.";
+        eventNote ||= "Rechazado por el fundador.";
       }
       if (input.decision === "reality_check") {
         patch.approvalState = "pendiente";
         patch.stage = "quality";
         patch.realityStatus = "En verificación";
         patch.note = input.note ?? "Enviado al Reality Checker.";
+        eventNote ||= "Enviado al Reality Checker.";
       }
 
       const [updated] = await db
@@ -85,6 +141,12 @@ export const content = {
         .set(patch)
         .where(eq(schema.contentItems.id, item.id))
         .returning();
+
+      await db.insert(schema.approvalEvents).values({
+        contentId: item.id,
+        decision: input.decision,
+        note: eventNote,
+      });
 
       const all = await db
         .select()

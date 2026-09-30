@@ -10,15 +10,40 @@ export type ClientRow = {
   status: string;
   leads: number;
   scheduled: number;
-  automationScore: number;
-  standardizedScore: number;
-  manualScore: number;
   brandVoice: string;
   brandPillars: string;
   brandColors: string;
   brandNotes: string;
+  brandUseWords: string;
+  brandAvoidWords: string;
+  allowedPromises: string;
+  communicationRestrictions: string;
   learning: string;
   founderMinutes?: number;
+  automationScore?: number;
+  standardizedScore?: number;
+  manualScore?: number;
+  activeCycleId?: number | null;
+  activeCycleName?: string;
+  activeCycleObjective?: string;
+};
+
+export type CycleRow = {
+  id: number;
+  clientId: number;
+  name: string;
+  startDate: string;
+  endDate: string;
+  businessGoal: string;
+  objective: string;
+  objectiveSource: string;
+  objectiveStatus: string;
+  primaryMetric: string;
+  baseline: string;
+  target: string;
+  objectiveRationale: string;
+  status: string;
+  targetContentCount: number;
 };
 
 export type AttentionRow = {
@@ -32,17 +57,38 @@ export type AttentionRow = {
 
 export type ContentRow = {
   id: number;
+  clientId: number;
+  cycleId: number;
   type: string;
   title: string;
   objective: string;
   cta: string;
+  pillar: string;
+  channel: string;
+  hook: string;
+  body: string;
+  caption: string;
+  visualBrief: string;
+  assetUrl: string;
+  sourceNotes: string;
+  brandReviewNotes: string;
+  realityReviewNotes: string;
   stage: string;
   approvalState: string;
   brandStatus: string;
   realityStatus: string;
   scheduledLabel: string;
   scheduledBucket: string;
+  scheduledAt?: Date | string | null;
   note: string;
+};
+
+export type ApprovalEventRow = {
+  id: number;
+  contentId: number;
+  decision: string;
+  note: string;
+  createdAt: Date | string;
 };
 
 export type PipelineRow = { id: number; position: number; name: string; count: number };
@@ -57,6 +103,16 @@ export type AgentRow = {
 };
 
 export type HoursRow = { id: number; category: string; minutes: number };
+
+export type TimeEntryRow = {
+  id: number;
+  clientId: number;
+  cycleId: number;
+  category: string;
+  minutes: number;
+  date: string;
+  description: string;
+};
 
 export type ManualTaskRow = {
   id: number;

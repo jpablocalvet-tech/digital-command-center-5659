@@ -1,9 +1,11 @@
+import { useState } from "react";
 import { Link } from "wouter";
-import { ArrowRight } from "lucide-react";
+import { ArrowRight, BrainCircuit } from "lucide-react";
 import { Loader, PageHeader } from "../components/layout";
 import { Card, CardBody, CardHeader } from "../components/ui/card";
 import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
+import { ContentDetailDialog } from "../components/content-detail";
 import {
   AgentList,
   ApprovalWatchItem,
@@ -22,20 +24,22 @@ import { useDecideContent } from "../queries/content";
 import { formatMinutes } from "@/lib/labels";
 
 function Index() {
-  const { clientId } = useActiveClient();
-  const dashboard = useDashboard(clientId);
+  const { clientId, cycleId } = useActiveClient();
+  const dashboard = useDashboard(clientId, cycleId);
   const decide = useDecideContent();
+  const [openId, setOpenId] = useState<number | null>(null);
 
-  if (dashboard.isLoading || !dashboard.data) {
+  if (!cycleId || dashboard.isLoading || !dashboard.data) {
     return (
       <>
         <PageHeader title="Inicio" description="Estado del cliente activo en un vistazo." />
-        <Loader label="Cargando el Command Center…" />
+        <Loader label={cycleId ? "Cargando el Command Center…" : "Seleccionando ciclo…"} />
       </>
     );
   }
 
-  const { client, attention, content, pipeline, agents, hours, tasks, kpis } = dashboard.data;
+  const { client, cycle, attention, content, pipeline, agents, hours, tasks, kpis, automation } =
+    dashboard.data;
   const approvalWatch = content.filter(
     (item) => item.approvalState === "listo" || item.approvalState === "dato_por_confirmar",
   );
@@ -44,44 +48,60 @@ function Index() {
     <>
       <PageHeader
         title="Inicio"
-        description="Qué está pasando, qué necesita tu atención y qué está haciendo el sistema."
+        description="Qué está pasando, qué necesita tu atención y cuánto trabajo humano sigue vivo."
       />
 
       <div className="space-y-5">
         <Card>
           <CardBody className="flex flex-wrap items-start justify-between gap-5">
-            <div>
+            <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-center gap-2">
                 <Badge tone="primary">{client.code}</Badge>
                 <Badge tone="info">{client.type}</Badge>
                 <Badge tone="accent" dot>
                   {client.status}
                 </Badge>
+                <Badge tone="neutral">{cycle.name}</Badge>
               </div>
               <h2 className="mt-3 font-display text-[22px] font-extrabold text-foreground">
                 {client.name}
               </h2>
-              <p className="mt-1 text-[13.5px] text-muted-foreground">
-                Servicio: {client.service}
+              <p className="mt-1 text-[13.5px] text-muted-foreground">Servicio: {client.service}</p>
+              <p className="mt-1 max-w-3xl text-[13.5px] text-foreground">
+                <span className="font-semibold">Objetivo del ciclo:</span> {cycle.objective}
               </p>
-              <p className="mt-0.5 text-[13.5px] text-muted-foreground">
-                Objetivo actual: {client.objective}
-              </p>
+              <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[12px] text-muted-foreground">
+                <span>Métrica: {cycle.primaryMetric || "Por definir"}</span>
+                <span>Target: {cycle.target || "Por definir"}</span>
+              </div>
             </div>
-            <Link
-              to={`/clientes/${client.id}`}
-              className="inline-flex items-center gap-1.5 rounded-md bg-primary px-4 py-2.5 text-[13px] font-semibold text-primary-foreground hover:bg-primary/90"
-            >
-              Abrir Client Hub
-              <ArrowRight className="size-4" />
-            </Link>
+            <div className="flex flex-wrap gap-2">
+              <Link
+                to="/strategy-lab"
+                className="inline-flex items-center gap-1.5 rounded-md border border-border px-4 py-2.5 text-[13px] font-semibold text-primary hover:bg-surface-soft"
+              >
+                <BrainCircuit className="size-4" />
+                Revisar objetivo
+              </Link>
+              <Link
+                to={`/clientes/${client.id}`}
+                className="inline-flex items-center gap-1.5 rounded-md bg-primary px-4 py-2.5 text-[13px] font-semibold text-primary-foreground hover:bg-primary/90"
+              >
+                Abrir Client Hub
+                <ArrowRight className="size-4" />
+              </Link>
+            </div>
           </CardBody>
         </Card>
 
         <AttentionList items={attention} />
 
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
-          <KpiCard label="Contenidos del ciclo" value={String(kpis.cycleContent)} />
+          <KpiCard
+            label="Contenidos del ciclo"
+            value={`${kpis.cycleContent}/${kpis.targetContent}`}
+            hint="Actual / objetivo"
+          />
           <KpiCard
             label="Listos para aprobación"
             value={String(kpis.readyForApproval)}
@@ -93,12 +113,13 @@ function Index() {
           <KpiCard
             label="Founder Hours"
             value={formatMinutes(kpis.founderMinutes)}
-            hint="Objetivo: ≤ 4 h / mes"
+            hint="Objetivo: ≤ 4 h / ciclo"
           />
           <KpiCard
-            label="Automation Score"
+            label="Automatizado"
             value={`${kpis.automationScore}%`}
             tone="accent"
+            hint={`${formatMinutes(automation.recoverableMinutes)} recuperables`}
           />
         </div>
 
@@ -107,12 +128,9 @@ function Index() {
         <Card>
           <CardHeader
             title="AI Marketing Team"
-            subtitle="Estado de cada agente en el ciclo actual."
+            subtitle="Todavía simulado en V0.2; la arquitectura ya está separada por ciclo."
             action={
-              <Link
-                to="/ai-team"
-                className="text-[12.5px] font-semibold text-primary hover:underline"
-              >
+              <Link to="/ai-team" className="text-[12.5px] font-semibold text-primary hover:underline">
                 Ver detalle
               </Link>
             }
@@ -153,9 +171,7 @@ function Index() {
                         disabled={decide.isPending}
                         onClick={() => decide.mutate({ id: item.id, decision: "aprobar" })}
                       >
-                        {decide.isPending && decide.variables?.id === item.id
-                          ? "Guardando…"
-                          : "Aprobar"}
+                        {decide.isPending && decide.variables?.id === item.id ? "Guardando…" : "Aprobar"}
                       </Button>
                       <Button
                         size="sm"
@@ -165,21 +181,15 @@ function Index() {
                       >
                         Solicitar cambios
                       </Button>
-                      <Link
-                        to="/aprobaciones"
-                        className="inline-flex h-8 items-center rounded-md px-3 text-[13px] font-semibold text-primary hover:underline"
-                      >
+                      <Button size="sm" variant="ghost" onClick={() => setOpenId(item.id)}>
                         Abrir contenido
-                      </Link>
+                      </Button>
                     </>
                   ) : (
                     <>
-                      <Link
-                        to="/aprobaciones"
-                        className="inline-flex h-8 items-center rounded-md bg-primary px-3 text-[13px] font-semibold text-primary-foreground hover:bg-primary/90"
-                      >
+                      <Button size="sm" onClick={() => setOpenId(item.id)}>
                         Revisar
-                      </Link>
+                      </Button>
                       <Button
                         size="sm"
                         variant="outline"
@@ -201,9 +211,9 @@ function Index() {
         <div className="grid gap-5 lg:grid-cols-2">
           <FounderHoursPanel distribution={hours} totalMinutes={kpis.founderMinutes} />
           <AutomationScorePanel
-            automated={client.automationScore}
-            standardized={client.standardizedScore}
-            manual={client.manualScore}
+            automated={automation.automated}
+            standardized={automation.standardized}
+            manual={automation.manual}
             tasks={tasks.slice(0, 4)}
             footer={
               <Link
@@ -222,6 +232,8 @@ function Index() {
           <IntegrationsStrip />
         </div>
       </div>
+
+      {openId ? <ContentDetailDialog id={openId} onClose={() => setOpenId(null)} /> : null}
     </>
   );
 }

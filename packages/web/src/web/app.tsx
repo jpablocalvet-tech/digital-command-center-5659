@@ -17,7 +17,7 @@ function NotFound() {
     <div className="dcc-card p-8">
       <p className="font-display text-lg font-bold text-ink">Sección no disponible</p>
       <p className="mt-2 text-sm text-muted">
-        Esta ruta no existe en la V0.1 del Digital Command Center.
+        Esta ruta no existe en la V0.2 del Digital Command Center.
       </p>
     </div>
   );

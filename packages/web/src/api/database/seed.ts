@@ -1,18 +1,19 @@
 /**
- * Semilla de datos mock para la V0.1: Cliente 000 — RUTA Travel Design Studio.
+ * Semilla de datos para V0.2 CORE: Cliente 000 — RUTA Travel Design Studio.
  * Ejecutar: cd packages/web && bun --env-file=../../.env src/api/database/seed.ts
  */
 import { db } from "./index";
 import * as schema from "./schema";
 
 async function seed() {
+  await db.delete(schema.approvalEvents);
   await db.delete(schema.attentionItems);
   await db.delete(schema.contentItems);
-  await db.delete(schema.pipelineStages);
   await db.delete(schema.agents);
-  await db.delete(schema.founderHours);
+  await db.delete(schema.timeEntries);
   await db.delete(schema.manualTasks);
   await db.delete(schema.strategies);
+  await db.delete(schema.contentCycles);
   await db.delete(schema.clients);
 
   const [ruta] = await db
@@ -21,180 +22,220 @@ async function seed() {
       code: "Cliente 000",
       name: "RUTA Travel Design Studio",
       type: "Piloto interno",
-      service: "Marketing Digital",
-      objective: "Generar solicitudes reales de diseño de viajes.",
+      service: "Sistema de contenido y gestión digital",
+      objective: "Conseguir solicitudes reales de diseño de viajes.",
       status: "Activo",
       leads: 0,
       scheduled: 0,
-      automationScore: 45,
-      standardizedScore: 30,
-      manualScore: 25,
-      brandVoice: "Cercana, experta y honesta. Habla de viajes como diseño, no como paquetes.",
-      brandPillars: "Educación de viaje · Diseño a medida · Errores que evitar · Detrás del proceso",
+      brandVoice:
+        "Cercana, experta y honesta. Habla de viajes como diseño, no como paquetes. Clara y útil, sin exageraciones.",
+      brandPillars:
+        "Educación de viaje · Diseño a medida · Errores que evitar · Detrás del proceso · Casos reales",
       brandColors: "Arena, verde profundo, tinta",
-      brandNotes: "Evitar clichés de agencia de viajes y promesas de precio.",
+      brandNotes: "Evitar clichés de agencia de viajes y promesas de ahorro no demostrables.",
+      brandUseWords: "diseño de viaje · ruta · estrategia de reservas · a medida · acompañamiento",
+      brandAvoidWords: "curaduría · paquete turístico · viaje perfecto · barato garantizado",
+      allowedPromises:
+        "Diseño personalizado, claridad de ruta, estrategia de reservas, organización y acompañamiento según el servicio contratado.",
+      communicationRestrictions:
+        "No prometer disponibilidad, precios, descuentos ni ahorros sin fuente vigente. No presentar RUTA como OTA.",
       learning: "Todavía no hay suficientes datos publicados para generar conclusiones.",
     })
     .returning();
 
   const clientId = ruta.id;
 
-  await db.insert(schema.attentionItems).values([
-    {
+  const [cycle] = await db
+    .insert(schema.contentCycles)
+    .values({
       clientId,
-      priority: "critico",
-      title: "2 contenidos listos para aprobación",
-      detail: "Carrusel Europa y Story CTA esperan tu decisión para poder programarse.",
-      link: "/aprobaciones",
-      linkLabel: "Ir a Aprobaciones",
-    },
-    {
-      clientId,
-      priority: "atencion",
-      title: "1 contenido requiere confirmar una afirmación",
-      detail: "Reel “¿Agencia de viajes o Travel Designer?” tiene un dato sin verificar.",
-      link: "/aprobaciones",
-      linkLabel: "Revisar dato",
-    },
-    {
-      clientId,
-      priority: "informativo",
-      title: "1 tarea manual candidata a automatización",
-      detail: "Transferencia de analytics: 30 min al mes recuperables.",
-      link: "/hours-automation",
-      linkLabel: "Ver backlog",
-    },
-  ]);
+      name: "RUTA · Octubre 2026",
+      startDate: "2026-10-01",
+      endDate: "2026-10-31",
+      businessGoal:
+        "Conseguir las primeras solicitudes reales de diseño de viajes sin depender de publicidad pagada.",
+      objective:
+        "Generar solicitudes cualificadas para RUTA y establecer una línea base de conversión orgánica durante octubre.",
+      objectiveSource: "manual_bootstrap",
+      objectiveStatus: "aprobado",
+      primaryMetric: "Solicitudes cualificadas",
+      baseline: "Sin línea base validada todavía",
+      target: "Establecer línea base; no inventar meta numérica antes del primer ciclo",
+      objectiveRationale:
+        "Es el primer ciclo operativo. La prioridad es obtener evidencia real de interés y medir el embudo antes de fijar objetivos cuantitativos.",
+      status: "Activo",
+      targetContentCount: 8,
+    })
+    .returning();
 
-  await db.insert(schema.pipelineStages).values([
-    { clientId, position: 1, name: "Idea", count: 8 },
-    { clientId, position: 2, name: "Research", count: 8 },
-    { clientId, position: 3, name: "Strategy", count: 8 },
-    { clientId, position: 4, name: "Content", count: 6 },
-    { clientId, position: 5, name: "Brand Review", count: 4 },
-    { clientId, position: 6, name: "Reality Check", count: 3 },
-    { clientId, position: 7, name: "Approval", count: 2 },
-    { clientId, position: 8, name: "Publishing", count: 0 },
-  ]);
+  const cycleId = cycle.id;
 
-  await db.insert(schema.contentItems).values([
+  const insertedContent = await db
+    .insert(schema.contentItems)
+    .values([
+      {
+        clientId,
+        cycleId,
+        type: "Carrusel",
+        title: "5 errores que encarecen un viaje a Europa",
+        objective: "Generar solicitudes de diseño de viaje",
+        cta: "Solicita tu ruta a medida",
+        pillar: "Errores que evitar",
+        channel: "Instagram",
+        hook: "Cinco decisiones aparentemente pequeñas pueden encarecer mucho un viaje por Europa.",
+        body:
+          "Borrador de carrusel: 1) reservar sin estrategia de fechas; 2) cambiar de ciudad demasiado; 3) ignorar costos de traslado; 4) comprar entradas tarde; 5) comparar solo el precio inicial.",
+        caption:
+          "Planear bien no significa llenar cada minuto: significa tomar las decisiones importantes en el momento correcto.",
+        visualBrief: "Carrusel limpio, editorial, 6 slides, iconografía de viaje y datos concretos.",
+        sourceNotes: "Verificar cualquier cifra o afirmación de precio antes de publicar.",
+        brandReviewNotes: "Tono aprobado; evitar lenguaje de agencia tradicional.",
+        realityReviewNotes: "Conceptos generales verificados; no usar porcentajes sin fuente.",
+        stage: "aprobacion",
+        approvalState: "listo",
+        brandStatus: "Aprobado",
+        realityStatus: "Verificado",
+        scheduledLabel: "Martes",
+        scheduledBucket: "semana",
+        note: "Listo para aprobación.",
+      },
+      {
+        clientId,
+        cycleId,
+        type: "Reel",
+        title: "¿Agencia de viajes o Travel Designer?",
+        objective: "Diferenciar la propuesta de valor",
+        cta: "Cuéntanos sobre tu viaje",
+        pillar: "Diseño a medida",
+        channel: "Instagram",
+        hook: "No todas las personas que te ayudan a viajar hacen el mismo trabajo.",
+        body:
+          "Guion preliminar explicando la diferencia entre vender productos turísticos y cobrar por diseñar la lógica completa del viaje.",
+        caption: "RUTA cobra por pensar el viaje contigo; no por empujarte un paquete genérico.",
+        visualBrief: "Reel talking-head/motion typography, 25–35 segundos.",
+        sourceNotes: "Evitar generalizaciones sobre todas las agencias de viajes.",
+        brandReviewNotes: "Alineado con posicionamiento 'no vendemos, diseñamos'.",
+        realityReviewNotes: "Revisar afirmación comparativa antes de publicar.",
+        stage: "aprobacion",
+        approvalState: "dato_por_confirmar",
+        brandStatus: "Aprobado",
+        realityStatus: "Dato por confirmar",
+        scheduledLabel: "Jueves",
+        scheduledBucket: "semana",
+        note: "Afirmación comparativa requiere revisión.",
+      },
+      {
+        clientId,
+        cycleId,
+        type: "Story / CTA",
+        title: "Solicitud RUTA: diseña tu viaje",
+        objective: "Captar solicitudes directas",
+        cta: "Cuéntanos sobre tu viaje",
+        pillar: "Diseño a medida",
+        channel: "Instagram Stories",
+        hook: "¿Ya sabes a dónde quieres ir, pero no cómo convertirlo en un viaje que funcione?",
+        body: "Story de 3 frames: problema → qué hace RUTA → CTA al formulario.",
+        caption: "",
+        visualBrief: "3 historias verticales, tipografía grande, CTA claro.",
+        stage: "quality",
+        approvalState: "pendiente",
+        brandStatus: "En revisión",
+        realityStatus: "Pendiente",
+        scheduledLabel: "Sábado",
+        scheduledBucket: "semana",
+      },
+      {
+        clientId,
+        cycleId,
+        type: "Carrusel",
+        title: "Cómo se diseña un itinerario de 14 días",
+        objective: "Mostrar el proceso de trabajo",
+        cta: "Conoce RUTA Completo",
+        pillar: "Detrás del proceso",
+        channel: "Instagram",
+        stage: "diseno",
+        approvalState: "pendiente",
+        brandStatus: "Pendiente",
+        realityStatus: "Pendiente",
+      },
+      {
+        clientId,
+        cycleId,
+        type: "Reel",
+        title: "3 destinos infravalorados de Italia",
+        objective: "Alcance con audiencia nueva",
+        cta: "Guarda para tu próximo viaje",
+        pillar: "Educación de viaje",
+        channel: "Instagram",
+        stage: "copy",
+        approvalState: "pendiente",
+        brandStatus: "Pendiente",
+        realityStatus: "Pendiente",
+      },
+      {
+        clientId,
+        cycleId,
+        type: "Post",
+        title: "Qué incluye (y qué no) un viaje diseñado",
+        objective: "Resolver objeción de precio",
+        cta: "Solicita información",
+        pillar: "Diseño a medida",
+        channel: "Instagram",
+        stage: "copy",
+        approvalState: "pendiente",
+        brandStatus: "Pendiente",
+        realityStatus: "Pendiente",
+      },
+      {
+        clientId,
+        cycleId,
+        type: "Carrusel",
+        title: "Presupuesto realista de un viaje a Japón",
+        objective: "Autoridad y confianza",
+        cta: "Solicita tu ruta a medida",
+        pillar: "Educación de viaje",
+        channel: "Instagram",
+        stage: "research",
+        approvalState: "pendiente",
+        brandStatus: "Pendiente",
+        realityStatus: "Pendiente",
+      },
+      {
+        clientId,
+        cycleId,
+        type: "Reel",
+        title: "Errores al reservar vuelos con escalas",
+        objective: "Educación de viaje",
+        cta: "Sigue para más",
+        pillar: "Errores que evitar",
+        channel: "Instagram",
+        stage: "idea",
+        approvalState: "pendiente",
+        brandStatus: "Pendiente",
+        realityStatus: "Pendiente",
+      },
+    ])
+    .returning();
+
+  const first = insertedContent[0];
+  const second = insertedContent[1];
+  await db.insert(schema.approvalEvents).values([
     {
-      clientId,
-      type: "Carrusel",
-      title: "5 errores que encarecen un viaje a Europa",
-      objective: "Generar solicitudes de diseño de viaje",
-      cta: "Solicita tu ruta a medida",
-      stage: "aprobacion",
-      approvalState: "listo",
-      brandStatus: "Aprobado",
-      realityStatus: "Verificado",
-      scheduledLabel: "Martes",
-      scheduledBucket: "semana",
-      note: "Listo para aprobación.",
+      contentId: first.id,
+      decision: "quality_ready",
+      note: "Brand Guardian y Reality Checker completaron revisión inicial.",
     },
     {
-      clientId,
-      type: "Reel",
-      title: "¿Agencia de viajes o Travel Designer?",
-      objective: "Diferenciar la propuesta de valor",
-      cta: "Escríbenos por WhatsApp",
-      stage: "aprobacion",
-      approvalState: "dato_por_confirmar",
-      brandStatus: "Aprobado",
-      realityStatus: "Dato por confirmar",
-      scheduledLabel: "Jueves",
-      scheduledBucket: "semana",
-      note: "Afirmación sobre ahorro promedio sin fuente.",
-    },
-    {
-      clientId,
-      type: "Story / CTA",
-      title: "Solicitud RUTA: diseña tu viaje",
-      objective: "Captar solicitudes directas",
-      cta: "Toca para solicitar",
-      stage: "quality",
-      approvalState: "pendiente",
-      brandStatus: "En revisión",
-      realityStatus: "Pendiente",
-      scheduledLabel: "Sábado",
-      scheduledBucket: "semana",
-      note: "",
-    },
-    {
-      clientId,
-      type: "Carrusel",
-      title: "Cómo se diseña un itinerario de 14 días",
-      objective: "Mostrar el proceso de trabajo",
-      cta: "Agenda una llamada",
-      stage: "diseno",
-      approvalState: "pendiente",
-      brandStatus: "Pendiente",
-      realityStatus: "Pendiente",
-      scheduledLabel: "",
-      scheduledBucket: "",
-      note: "",
-    },
-    {
-      clientId,
-      type: "Reel",
-      title: "3 destinos infravalorados de Italia",
-      objective: "Alcance con audiencia nueva",
-      cta: "Guarda para tu próximo viaje",
-      stage: "copy",
-      approvalState: "pendiente",
-      brandStatus: "Pendiente",
-      realityStatus: "Pendiente",
-      scheduledLabel: "",
-      scheduledBucket: "",
-      note: "",
-    },
-    {
-      clientId,
-      type: "Post",
-      title: "Qué incluye (y qué no) un viaje diseñado",
-      objective: "Resolver objeción de precio",
-      cta: "Solicita presupuesto",
-      stage: "copy",
-      approvalState: "pendiente",
-      brandStatus: "Pendiente",
-      realityStatus: "Pendiente",
-      scheduledLabel: "",
-      scheduledBucket: "",
-      note: "",
-    },
-    {
-      clientId,
-      type: "Carrusel",
-      title: "Presupuesto real de un viaje a Japón",
-      objective: "Autoridad y confianza",
-      cta: "Solicita tu ruta a medida",
-      stage: "research",
-      approvalState: "pendiente",
-      brandStatus: "Pendiente",
-      realityStatus: "Pendiente",
-      scheduledLabel: "",
-      scheduledBucket: "",
-      note: "",
-    },
-    {
-      clientId,
-      type: "Reel",
-      title: "Errores al reservar vuelos con escalas",
-      objective: "Educación de viaje",
-      cta: "Sigue para más",
-      stage: "idea",
-      approvalState: "pendiente",
-      brandStatus: "Pendiente",
-      realityStatus: "Pendiente",
-      scheduledLabel: "",
-      scheduledBucket: "",
-      note: "",
+      contentId: second.id,
+      decision: "dato_por_confirmar",
+      note: "Reality Checker detectó una afirmación comparativa que requiere ajuste.",
     },
   ]);
 
   await db.insert(schema.agents).values([
     {
       clientId,
+      cycleId,
       position: 1,
       name: "Marketing Orchestrator",
       role: "Coordina el ciclo y reparte trabajo",
@@ -203,6 +244,7 @@ async function seed() {
     },
     {
       clientId,
+      cycleId,
       position: 2,
       name: "Research Agent",
       role: "Investiga audiencia y temas",
@@ -211,6 +253,7 @@ async function seed() {
     },
     {
       clientId,
+      cycleId,
       position: 3,
       name: "Competitor Agent",
       role: "Observa competencia y referencias",
@@ -219,6 +262,7 @@ async function seed() {
     },
     {
       clientId,
+      cycleId,
       position: 4,
       name: "Strategy Agent",
       role: "Define pilares y ángulos",
@@ -227,6 +271,7 @@ async function seed() {
     },
     {
       clientId,
+      cycleId,
       position: 5,
       name: "Content Agent",
       role: "Escribe copy y guiones",
@@ -235,6 +280,7 @@ async function seed() {
     },
     {
       clientId,
+      cycleId,
       position: 6,
       name: "Brand Guardian",
       role: "Verifica tono y coherencia de marca",
@@ -243,6 +289,7 @@ async function seed() {
     },
     {
       clientId,
+      cycleId,
       position: 7,
       name: "Reality Checker",
       role: "Comprueba datos y afirmaciones",
@@ -251,6 +298,7 @@ async function seed() {
     },
     {
       clientId,
+      cycleId,
       position: 8,
       name: "Analytics Agent",
       role: "Lee resultados y aprendizajes",
@@ -259,11 +307,39 @@ async function seed() {
     },
   ]);
 
-  await db.insert(schema.founderHours).values([
-    { clientId, category: "Estrategia", minutes: 25 },
-    { clientId, category: "Revisión", minutes: 35 },
-    { clientId, category: "Diseño", minutes: 20 },
-    { clientId, category: "Administración", minutes: 15 },
+  await db.insert(schema.timeEntries).values([
+    {
+      clientId,
+      cycleId,
+      category: "Estrategia",
+      minutes: 25,
+      date: "2026-09-30",
+      description: "Definición inicial del piloto RUTA como Cliente 000.",
+    },
+    {
+      clientId,
+      cycleId,
+      category: "Revisión",
+      minutes: 35,
+      date: "2026-09-30",
+      description: "Revisión inicial de piezas del ciclo.",
+    },
+    {
+      clientId,
+      cycleId,
+      category: "Diseño",
+      minutes: 20,
+      date: "2026-09-30",
+      description: "Ajustes visuales de prueba.",
+    },
+    {
+      clientId,
+      cycleId,
+      category: "Administración",
+      minutes: 15,
+      date: "2026-09-30",
+      description: "Organización del piloto.",
+    },
   ]);
 
   await db.insert(schema.manualTasks).values([
@@ -331,7 +407,8 @@ async function seed() {
 
   await db.insert(schema.strategies).values({
     clientId,
-    objective: "Generar solicitudes reales de diseño de viajes cada mes.",
+    cycleId,
+    objective: cycle.objective,
     audience:
       "Profesionales de 30 a 50 años que quieren viajar bien, sin tiempo para planificar y con presupuesto medio-alto.",
     problems:
@@ -343,12 +420,12 @@ async function seed() {
     pillars:
       "Educación de viaje · Errores que evitar · Diseño a medida · Detrás del proceso · Casos reales.",
     channels: "Instagram (principal) · WhatsApp (conversión) · Email (seguimiento).",
-    mainCta: "Solicita el diseño de tu viaje.",
+    mainCta: "Cuéntanos sobre tu viaje.",
     aiStatus: "inactivo",
     aiMessage: "",
   });
 
-  console.log("Semilla lista: RUTA Travel Design Studio (Cliente 000).");
+  console.log("Semilla lista: RUTA · Octubre 2026 (Digital Command Center V0.2 CORE). ");
 }
 
 await seed();

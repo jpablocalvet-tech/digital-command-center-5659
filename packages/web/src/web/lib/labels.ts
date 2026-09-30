@@ -122,3 +122,12 @@ export const checkTones: Record<string, Tone> = {
 };
 
 export type Tone = "neutral" | "accent" | "warning" | "critical" | "info" | "primary";
+
+
+export const approvalDecisionLabels: Record<string, string> = {
+  quality_ready: "Listo para aprobación",
+  aprobar: "Aprobado",
+  cambios: "Cambios solicitados",
+  rechazar: "Rechazado",
+  reality_check: "Enviado a Reality Checker",
+};

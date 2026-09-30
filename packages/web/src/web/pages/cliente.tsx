@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "wouter";
-import { ArrowLeft, Pencil } from "lucide-react";
+import { ArrowLeft, Pencil, Plus } from "lucide-react";
 import { Loader, PageHeader } from "../components/layout";
 import { Card, CardBody, CardHeader } from "../components/ui/card";
 import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
+import { CycleCreateModal } from "../components/cycle-create-modal";
 import {
   AutomationScorePanel,
   FounderHoursPanel,
@@ -174,8 +175,64 @@ function ClienteHubPage() {
   const dashboard = useDashboard(clientId, pageCycleId);
   const strategy = useStrategy(clientId, pageCycleId);
   const [tab, setTab] = useState<(typeof tabs)[number]>("Resumen");
+  const [newCycleOpen, setNewCycleOpen] = useState(false);
+  const clientMeta = active.clients.find((client) => client.id === clientId);
 
-  if (!pageCycleId || dashboard.isLoading || !dashboard.data) {
+  if (cycles.isLoading) {
+    return (
+      <>
+        <PageHeader title="Client Hub" />
+        <Loader />
+      </>
+    );
+  }
+
+  if (!pageCycleId) {
+    return (
+      <>
+        <Link
+          to="/clientes"
+          className="mb-4 inline-flex items-center gap-1.5 text-[13px] font-semibold text-muted-foreground hover:text-primary"
+        >
+          <ArrowLeft className="size-3.5" />
+          Volver a Clientes
+        </Link>
+        <PageHeader
+          title={clientMeta?.name ?? "Client Hub"}
+          description={`${clientMeta?.code ?? "Cliente"} · todavía sin ciclo operativo`}
+          action={
+            <Button onClick={() => setNewCycleOpen(true)}>
+              <Plus className="size-4" />
+              Crear primer ciclo
+            </Button>
+          }
+        />
+        <Card>
+          <CardBody className="py-10 text-center">
+            <p className="font-display text-lg font-bold text-foreground">Este cliente todavía no tiene ciclos</p>
+            <p className="mx-auto mt-2 max-w-xl text-[13.5px] text-muted-foreground">
+              Crea el primer ciclo para separar objetivos, contenido, horas y aprendizajes antes de entrar a Strategy Lab.
+            </p>
+            <Button className="mt-4" onClick={() => setNewCycleOpen(true)}>
+              <Plus className="size-4" />
+              Nuevo ciclo
+            </Button>
+          </CardBody>
+        </Card>
+        <CycleCreateModal
+          clientId={clientId}
+          clientName={clientMeta?.name ?? "Cliente"}
+          open={newCycleOpen}
+          onClose={() => setNewCycleOpen(false)}
+          onCreated={(created) => {
+            if (clientId === active.clientId) active.setCycleId(created.id);
+          }}
+        />
+      </>
+    );
+  }
+
+  if (dashboard.isLoading || !dashboard.data) {
     return (
       <>
         <PageHeader title="Client Hub" />
@@ -196,7 +253,16 @@ function ClienteHubPage() {
         Volver a Clientes
       </Link>
 
-      <PageHeader title={client.name} description={`${client.code} · ${client.type} · ${cycle.name}`} />
+      <PageHeader
+        title={client.name}
+        description={`${client.code} · ${client.type} · ${cycle.name}`}
+        action={
+          <Button variant="outline" onClick={() => setNewCycleOpen(true)}>
+            <Plus className="size-4" />
+            Nuevo ciclo
+          </Button>
+        }
+      />
 
       <Card className="mb-5">
         <CardBody className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -214,7 +280,19 @@ function ClienteHubPage() {
           </div>
           <div>
             <p className="dcc-label">Objetivo del ciclo</p>
-            <p className="mt-1 text-[13.5px] font-semibold text-foreground">{cycle.objective}</p>
+            <p className="mt-1 text-[13.5px] font-semibold text-foreground">{cycle.objective || "Por definir"}</p>
+          </div>
+          <div>
+            <p className="dcc-label">Contacto</p>
+            <p className="mt-1 text-[13.5px] font-semibold text-foreground">{client.contactName || "Sin contacto"}</p>
+          </div>
+          <div>
+            <p className="dcc-label">Email</p>
+            <p className="mt-1 break-all text-[13.5px] font-semibold text-foreground">{client.contactEmail || "—"}</p>
+          </div>
+          <div>
+            <p className="dcc-label">WhatsApp</p>
+            <p className="mt-1 text-[13.5px] font-semibold text-foreground">{client.contactWhatsapp || "—"}</p>
           </div>
         </CardBody>
       </Card>
@@ -345,6 +423,16 @@ function ClienteHubPage() {
           </Card>
         </div>
       ) : null}
+
+      <CycleCreateModal
+        clientId={clientId}
+        clientName={client.name}
+        open={newCycleOpen}
+        onClose={() => setNewCycleOpen(false)}
+        onCreated={(created) => {
+          if (clientId === active.clientId) active.setCycleId(created.id);
+        }}
+      />
     </>
   );
 }

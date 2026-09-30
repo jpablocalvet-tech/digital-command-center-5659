@@ -63,7 +63,7 @@ function Brand() {
         Command Center
       </p>
       <p className="mt-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-white/45">
-        V0.2 · Core
+        V0.2.1 · Core
       </p>
     </div>
   );

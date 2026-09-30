@@ -20,6 +20,18 @@ export function useDashboard(clientId: number, cycleId: number) {
   );
 }
 
+export function useCreateClient() {
+  const queryClient = useQueryClient();
+  return useMutation(
+    orpc.clients.create.mutationOptions({
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: orpc.clients.key() });
+        queryClient.invalidateQueries({ queryKey: orpc.cycles.key() });
+      },
+    }),
+  );
+}
+
 export function useUpdateBrand() {
   const queryClient = useQueryClient();
   return useMutation(

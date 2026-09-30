@@ -4,7 +4,7 @@ import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
 import { Loader } from "./layout";
 import { useContentDetail, useDecideContent, useUpdateContent } from "../queries/content";
-import { approvalLabels, approvalTones, checkTones, stageLabels, type Stage } from "@/lib/labels";
+import { approvalDecisionLabels, approvalLabels, approvalTones, checkTones, stageLabels, type Stage } from "@/lib/labels";
 
 type Editable = {
   type: string;
@@ -134,7 +134,7 @@ export function ContentDetailDialog({
       >
         <div className="sticky top-0 z-10 flex items-center justify-between gap-3 rounded-t-xl border-b border-border bg-card/95 px-5 py-4 backdrop-blur">
           <div>
-            <p className="dcc-label">Content Detail</p>
+            <p className="dcc-label">Detalle de contenido</p>
             <p className="mt-1 font-display text-[18px] font-bold text-foreground">
               {detail.data?.item.title ?? "Cargando contenido…"}
             </p>
@@ -228,7 +228,7 @@ export function ContentDetailDialog({
                 onChange={(v) => set("scheduledLabel", v)}
               />
               <TextField
-                label="Bucket (hoy / manana / semana)"
+                label="Ventana de publicación (hoy / mañana / semana)"
                 value={values.scheduledBucket}
                 onChange={(v) => set("scheduledBucket", v)}
               />
@@ -336,7 +336,7 @@ export function ContentDetailDialog({
                   detail.data.events.map((event) => (
                     <div key={event.id} className="rounded-md border border-border px-3 py-2.5">
                       <div className="flex flex-wrap items-center justify-between gap-2">
-                        <p className="text-[13px] font-semibold text-foreground">{event.decision}</p>
+                        <p className="text-[13px] font-semibold text-foreground">{approvalDecisionLabels[event.decision] ?? event.decision}</p>
                         <p className="text-[11.5px] text-muted-foreground">
                           {new Date(String(event.createdAt)).toLocaleString("es-MX")}
                         </p>

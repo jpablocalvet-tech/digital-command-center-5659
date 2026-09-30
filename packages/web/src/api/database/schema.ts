@@ -9,6 +9,9 @@ export const clients = sqliteTable("clients", {
   service: text("service").notNull(),
   /** Objetivo general del cliente; el objetivo operativo vive por ciclo. */
   objective: text("objective").notNull(),
+  contactName: text("contact_name").notNull().default(""),
+  contactEmail: text("contact_email").notNull().default(""),
+  contactWhatsapp: text("contact_whatsapp").notNull().default(""),
   status: text("status").notNull().default("Activo"),
   leads: integer("leads").notNull().default(0),
   scheduled: integer("scheduled").notNull().default(0),
@@ -21,6 +24,9 @@ export const clients = sqliteTable("clients", {
   allowedPromises: text("allowed_promises").notNull().default(""),
   communicationRestrictions: text("communication_restrictions").notNull().default(""),
   learning: text("learning").notNull().default(""),
+  createdAt: integer("created_at", { mode: "timestamp" })
+    .notNull()
+    .$defaultFn(() => new Date()),
 });
 
 /** Ciclos de contenido/campañas. Toda operación temporal debe pertenecer a un ciclo. */

@@ -7,6 +7,9 @@ export type ClientRow = {
   type: string;
   service: string;
   objective: string;
+  contactName: string;
+  contactEmail: string;
+  contactWhatsapp: string;
   status: string;
   leads: number;
   scheduled: number;
@@ -19,6 +22,7 @@ export type ClientRow = {
   allowedPromises: string;
   communicationRestrictions: string;
   learning: string;
+  createdAt?: Date | string;
   founderMinutes?: number;
   automationScore?: number;
   standardizedScore?: number;

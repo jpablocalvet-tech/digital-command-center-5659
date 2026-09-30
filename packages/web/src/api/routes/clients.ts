@@ -176,6 +176,123 @@ export const clients = {
       };
     }),
 
+  create: base
+    .input(
+      z.object({
+        code: z.string().min(2),
+        name: z.string().min(2),
+        type: z.enum(["Interno", "Externo"]),
+        service: z.string().min(2),
+        objective: z.string().default(""),
+        status: z.enum(["Activo", "Pausado", "Prospecto"]).default("Activo"),
+        contactName: z.string().default(""),
+        contactEmail: z.string().default(""),
+        contactWhatsapp: z.string().default(""),
+        createInitialCycle: z.boolean().default(true),
+        cycleName: z.string().default(""),
+        cycleStartDate: z.string().default(""),
+        cycleEndDate: z.string().default(""),
+        cycleBusinessGoal: z.string().default(""),
+        cycleTargetContentCount: z.number().int().min(1).max(100).default(8),
+      }),
+    )
+    .handler(async ({ input }) => {
+      if (input.createInitialCycle && (!input.cycleName.trim() || !input.cycleStartDate || !input.cycleEndDate)) {
+        throw new ORPCError("BAD_REQUEST", {
+          message: "Para crear el ciclo inicial indica nombre, fecha de inicio y fecha de fin",
+        });
+      }
+      if (input.createInitialCycle && input.cycleEndDate < input.cycleStartDate) {
+        throw new ORPCError("BAD_REQUEST", { message: "La fecha de fin no puede ser anterior a la de inicio" });
+      }
+
+      const duplicate = await db
+        .select()
+        .from(schema.clients)
+        .where(eq(schema.clients.code, input.code));
+      if (duplicate.length) {
+        throw new ORPCError("BAD_REQUEST", { message: "Ese código de cliente ya existe" });
+      }
+
+      const [created] = await db
+        .insert(schema.clients)
+        .values({
+          code: input.code.trim(),
+          name: input.name.trim(),
+          type: input.type,
+          service: input.service.trim(),
+          objective: input.objective.trim(),
+          status: input.status,
+          contactName: input.contactName.trim(),
+          contactEmail: input.contactEmail.trim(),
+          contactWhatsapp: input.contactWhatsapp.trim(),
+        })
+        .returning();
+
+      let cycle = null;
+      if (input.createInitialCycle) {
+        [cycle] = await db
+          .insert(schema.contentCycles)
+          .values({
+            clientId: created.id,
+            name: input.cycleName.trim(),
+            startDate: input.cycleStartDate,
+            endDate: input.cycleEndDate,
+            businessGoal: input.cycleBusinessGoal.trim(),
+            objective: "",
+            objectiveSource: "manual",
+            objectiveStatus: "borrador",
+            primaryMetric: "",
+            baseline: "",
+            target: "",
+            objectiveRationale: "",
+            status: "Activo",
+            targetContentCount: input.cycleTargetContentCount,
+          })
+          .returning();
+
+        await db.insert(schema.strategies).values({
+          clientId: created.id,
+          cycleId: cycle.id,
+          objective: "",
+          audience: "",
+          problems: "",
+          valueProp: "",
+          competitors: "",
+          pillars: "",
+          channels: "",
+          mainCta: "",
+          aiStatus: "inactivo",
+          aiMessage: "",
+        });
+
+        const templates = [
+          ["Marketing Orchestrator", "Coordina el ciclo y reparte trabajo"],
+          ["Research Agent", "Investiga audiencia y temas"],
+          ["Competitor Agent", "Observa competencia y referencias"],
+          ["Strategy Agent", "Define pilares y ángulos"],
+          ["Content Agent", "Escribe copy y guiones"],
+          ["Brand Guardian", "Verifica tono y coherencia de marca"],
+          ["Reality Checker", "Comprueba datos y afirmaciones"],
+          ["Analytics Agent", "Lee resultados y aprendizajes"],
+        ] as const;
+
+        await db.insert(schema.agents).values(
+          templates.map(([name, role], index) => ({
+            clientId: created.id,
+            cycleId: cycle!.id,
+            position: index + 1,
+            name,
+            role,
+            status: "esperando",
+            lastAction: "Cliente nuevo; ciclo listo para configurar",
+          })),
+        );
+      }
+
+      return { client: created, cycle };
+    }),
+
   updateBrand: base
     .input(
       z.object({

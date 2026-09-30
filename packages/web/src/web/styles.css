@@ -1,0 +1,91 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@theme inline {
+  --radius-sm: 8px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-xl: 18px;
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--foreground);
+  --color-popover: var(--card);
+  --color-popover-foreground: var(--foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--primary);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--critical);
+  --color-critical: var(--critical);
+  --color-warning: var(--warning);
+  --color-info: var(--info);
+  --color-border: var(--border);
+  --color-input: var(--border);
+  --color-ring: var(--ring);
+  --color-surface-soft: var(--surface-soft);
+  --font-sans: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Manrope", ui-sans-serif, system-ui, sans-serif;
+}
+
+:root {
+  --background: #f4f6f9;
+  --foreground: #0f1b2d;
+  --card: #ffffff;
+  --primary: #14314f;
+  --primary-foreground: #f7fafc;
+  --secondary: #eef2f7;
+  --muted: #eef2f7;
+  --muted-foreground: #62708a;
+  --accent: #0e8c7f;
+  --accent-foreground: #ffffff;
+  --warning: #b7791f;
+  --critical: #b42318;
+  --info: #2e5aac;
+  --border: #e3e8f0;
+  --ring: #14314f;
+  --surface-soft: #eef2f7;
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  html {
+    -webkit-font-smoothing: antialiased;
+  }
+  body {
+    @apply bg-background text-foreground font-sans;
+  }
+  h1,
+  h2,
+  h3,
+  h4 {
+    @apply font-display tracking-[-0.015em];
+  }
+}
+
+@layer components {
+  .dcc-card {
+    @apply bg-card rounded-lg border border-border;
+    box-shadow: 0 1px 2px rgba(16, 27, 45, 0.06);
+  }
+  .dcc-label {
+    @apply text-[11px] font-semibold uppercase tracking-[0.09em] text-muted-foreground;
+  }
+  .dcc-num {
+    font-variant-numeric: tabular-nums;
+  }
+  .dcc-scroll::-webkit-scrollbar {
+    height: 8px;
+    width: 8px;
+  }
+  .dcc-scroll::-webkit-scrollbar-thumb {
+    background: #cfd8e5;
+    border-radius: 999px;
+  }
+}

@@ -114,7 +114,7 @@ export const approvalEvents = sqliteTable("approval_events", {
     .$defaultFn(() => new Date()),
 });
 
-/** Agentes del ciclo; los dos primeros agentes tienen ejecuciones reales en V0.3. */
+/** Agentes del ciclo; los agentes con ejecución real derivan su estado de ai_executions. */
 export const agents = sqliteTable("agents", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   clientId: integer("client_id").notNull(),
@@ -139,6 +139,28 @@ export const aiExecutions = sqliteTable("ai_executions", {
   model: text("model").notNull().default(""),
   errorMessage: text("error_message").notNull().default(""),
   metadata: text("metadata").notNull().default("{}"),
+});
+
+/** Briefs de Research Agent; cada ejecución conserva su propio resultado. */
+export const researchBriefs = sqliteTable("research_briefs", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  clientId: integer("client_id").notNull(),
+  cycleId: integer("cycle_id").notNull(),
+  executionId: integer("execution_id")
+    .notNull()
+    .references(() => aiExecutions.id),
+  briefJson: text("brief_json").notNull(),
+  reviewStatus: text("review_status", {
+    enum: ["pendiente", "aprobado", "cambios"],
+  })
+    .notNull()
+    .default("pendiente"),
+  humanNote: text("human_note").notNull().default(""),
+  sourceStrategyUpdatedAt: integer("source_strategy_updated_at", { mode: "timestamp" }).notNull(),
+  createdAt: integer("created_at", { mode: "timestamp" })
+    .notNull()
+    .$defaultFn(() => new Date()),
+  reviewedAt: integer("reviewed_at", { mode: "timestamp" }),
 });
 
 /** Founder Hours reales: cada entrada es un registro de tiempo. */

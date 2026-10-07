@@ -42,6 +42,8 @@ export type CycleRow = {
   objective: string;
   objectiveSource: string;
   objectiveStatus: string;
+  objectiveProposal: string;
+  objectiveProposalStatus: string;
   primaryMetric: string;
   baseline: string;
   target: string;

@@ -5,7 +5,7 @@ import { db } from "../database";
 import * as schema from "../database/schema";
 
 export const team = {
-  /** AI Marketing Team del ciclo (estados mock, sin IA real en V0.2). */
+  /** Agentes del ciclo; las ejecuciones reales se consultan mediante el registro de IA. */
   list: base
     .input(z.object({ clientId: z.number(), cycleId: z.number() }))
     .handler(({ input }) =>

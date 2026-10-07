@@ -6,7 +6,12 @@ import { Button } from "../components/ui/button";
 import { Badge } from "../components/ui/badge";
 import { useActiveClient } from "../components/active-client";
 import { useCycle, usePreviewObjective, useUpdateCycleObjective } from "../queries/cycles";
-import { useSaveStrategy, useSimulateStrategy, useStrategy } from "../queries/strategy";
+import {
+  useAIStatus,
+  useGenerateStrategy,
+  useSaveStrategy,
+  useStrategy,
+} from "../queries/strategy";
 
 type Values = {
   objective: string;
@@ -27,6 +32,24 @@ type ObjectiveValues = {
   target: string;
   objectiveRationale: string;
 };
+
+type ObjectiveProposal = {
+  objective: string;
+  primaryMetric: string;
+  successCriteria: string[];
+  reasoning: string;
+  assumptions: string[];
+  confidenceNotes: string[];
+};
+
+function parseProposal(value: string): ObjectiveProposal | null {
+  if (!value) return null;
+  try {
+    return JSON.parse(value) as ObjectiveProposal;
+  } catch {
+    return null;
+  }
+}
 
 const fields: { key: keyof Values; label: string; hint: string; rows: number }[] = [
   { key: "audience", label: "Audiencia", hint: "A quién le hablamos", rows: 3 },
@@ -63,7 +86,8 @@ function StrategyLabPage() {
   const cycle = useCycle(cycleId);
   const strategy = useStrategy(clientId, cycleId);
   const save = useSaveStrategy();
-  const simulate = useSimulateStrategy();
+  const generateStrategy = useGenerateStrategy();
+  const aiStatus = useAIStatus();
   const previewObjective = usePreviewObjective();
   const updateObjective = useUpdateCycleObjective();
   const [values, setValues] = useState<Values>(empty);
@@ -109,17 +133,31 @@ function StrategyLabPage() {
   }
 
   const useSuggestion = () => {
-    const suggestion = previewObjective.data;
+    const suggestion = previewObjective.data ?? parseProposal(cycle.data?.objectiveProposal ?? "");
     if (!suggestion) return;
     setObjectiveValues((current) => ({
       ...current,
       objective: suggestion.objective,
       primaryMetric: suggestion.primaryMetric,
-      target: suggestion.target,
-      objectiveRationale: suggestion.rationale,
+      target: suggestion.successCriteria.join("\n"),
+      objectiveRationale: suggestion.reasoning,
     }));
     setObjectiveDirty(true);
   };
+
+  const proposal = previewObjective.data ?? parseProposal(cycle.data.objectiveProposal);
+  const objectiveStatus = previewObjective.isPending
+    ? "Generando"
+    : previewObjective.isError || cycle.data.objectiveProposalStatus === "error"
+      ? "Error"
+      : cycle.data.objectiveProposalStatus === "generando"
+        ? "Generando"
+        : cycle.data.objectiveProposalStatus === "propuesto" || proposal
+          ? "Propuesto"
+          : cycle.data.objectiveStatus === "aprobado"
+            ? "Aprobado"
+            : "Sin propuesta";
+  const aiConfigured = aiStatus.data?.configured === true;
 
   return (
     <>
@@ -134,7 +172,7 @@ function StrategyLabPage() {
           subtitle="Dirección humana → propuesta IA → aprobación humana. No dejamos que la IA invente sola qué quiere el negocio."
           action={
             <Badge tone="info" dot>
-              V0.2 · Preview heurístico
+              {objectiveStatus}
             </Badge>
           }
         />
@@ -191,17 +229,23 @@ function StrategyLabPage() {
           <div className="flex flex-wrap gap-2">
             <Button
               variant="outline"
-              disabled={previewObjective.isPending || objectiveValues.businessGoal.trim().length < 3}
+              disabled={
+                !aiConfigured ||
+                previewObjective.isPending ||
+                objectiveValues.businessGoal.trim().length < 3
+              }
               onClick={() =>
                 previewObjective.mutate({
+                  clientId,
+                  cycleId,
                   businessGoal: objectiveValues.businessGoal,
                   baseline: objectiveValues.baseline,
-                  primaryMetric: objectiveValues.primaryMetric || "Solicitudes cualificadas",
+                  primaryMetric: objectiveValues.primaryMetric,
                 })
               }
             >
               <BrainCircuit className="size-4" />
-              {previewObjective.isPending ? "Analizando…" : "Proponer objetivo con IA"}
+              {previewObjective.isPending ? "Generando…" : "Proponer objetivo con IA"}
             </Button>
             <Button
               disabled={!objectiveDirty || updateObjective.isPending}
@@ -210,8 +254,7 @@ function StrategyLabPage() {
                   {
                     id: cycleId,
                     ...objectiveValues,
-                    objectiveSource: previewObjective.data ? "ai_assisted_preview" : "manual",
-                    objectiveStatus: "aprobado",
+                    objectiveSource: proposal ? "ai" : "manual",
                   },
                   { onSuccess: () => setObjectiveDirty(false) },
                 )
@@ -222,27 +265,53 @@ function StrategyLabPage() {
             </Button>
           </div>
 
-          {previewObjective.data ? (
+          {!aiStatus.isLoading && aiStatus.data?.configured === false ? (
+            <p role="status" className="text-[13px] font-semibold text-warning">
+              IA no configurada
+            </p>
+          ) : null}
+          {previewObjective.isError ? (
+            <p role="alert" className="text-[13px] text-critical">
+              {previewObjective.error instanceof Error
+                ? previewObjective.error.message
+                : "No fue posible generar la propuesta"}
+            </p>
+          ) : null}
+          {proposal ? (
             <div className="rounded-lg border border-info/30 bg-info/5 p-4">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div className="flex items-center gap-2">
                   <Sparkles className="size-4 text-info" />
                   <p className="text-[13.5px] font-bold text-foreground">Propuesta del Objective Builder</p>
                 </div>
-                <Badge tone="info">Simulación V0.2</Badge>
+                <Badge tone="info">Propuesta IA</Badge>
               </div>
               <p className="mt-3 text-[13.5px] leading-relaxed text-foreground">
-                {previewObjective.data.objective}
+                {proposal.objective}
               </p>
               <div className="mt-3 grid gap-3 md:grid-cols-2">
                 <div>
-                  <p className="dcc-label">Target sugerido</p>
-                  <p className="mt-1 text-[13px] text-foreground">{previewObjective.data.target}</p>
+                  <p className="dcc-label">Métrica principal</p>
+                  <p className="mt-1 text-[13px] text-foreground">{proposal.primaryMetric}</p>
                 </div>
                 <div>
                   <p className="dcc-label">Por qué</p>
-                  <p className="mt-1 text-[13px] text-foreground">{previewObjective.data.rationale}</p>
+                  <p className="mt-1 text-[13px] text-foreground">{proposal.reasoning}</p>
                 </div>
+              </div>
+              <div className="mt-3 grid gap-3 md:grid-cols-3">
+                {[
+                  ["Criterios de éxito", proposal.successCriteria],
+                  ["Suposiciones", proposal.assumptions],
+                  ["Confianza y límites", proposal.confidenceNotes],
+                ].map(([label, items]) => (
+                  <div key={label as string}>
+                    <p className="dcc-label">{label as string}</p>
+                    <ul className="mt-1 list-disc space-y-1 pl-4 text-[13px] text-foreground">
+                      {(items as string[]).map((item) => <li key={item}>{item}</li>)}
+                    </ul>
+                  </div>
+                ))}
               </div>
               <Button className="mt-4" size="sm" variant="outline" onClick={useSuggestion}>
                 Usar esta propuesta
@@ -299,23 +368,46 @@ function StrategyLabPage() {
           </div>
 
           <p className="text-[12px] leading-relaxed text-muted-foreground">
-            En V0.3 este botón sí llamará a IA real y usará histórico, resultados, capacidad del fundador, estacionalidad y funnel. La IA propone; el objetivo no queda activo hasta que tú lo apruebas.
+            La propuesta no activa el objetivo. Revísala y apruébala para usarla en la estrategia.
           </p>
         </CardBody>
       </Card>
 
       <PageHeader
         title="Ficha estratégica"
-        description="Una vez aprobado el objetivo, el AI Team lo transforma en audiencia, pilares, canales y contenido."
+        description="El AI Team propone una estrategia a partir del objetivo aprobado. Las piezas de contenido se crean por separado."
         action={
           <div className="flex flex-wrap gap-2">
             <Button
               variant="outline"
-              disabled={simulate.isPending}
-              onClick={() => simulate.mutate({ clientId, cycleId })}
+              disabled={
+                !aiConfigured ||
+                cycle.data.objectiveStatus !== "aprobado" ||
+                generateStrategy.isPending
+              }
+              onClick={() =>
+                generateStrategy.mutate(
+                  { clientId, cycleId },
+                  {
+                    onSuccess: (generated) => {
+                      setValues({
+                        objective: cycle.data.objective,
+                        audience: generated.audience,
+                        problems: generated.customerProblems.join("\n"),
+                        valueProp: generated.valueProposition,
+                        competitors: generated.competitorsToReview.join("\n"),
+                        pillars: generated.contentPillars.join("\n"),
+                        channels: generated.recommendedChannels.join("\n"),
+                        mainCta: generated.primaryCTA,
+                      });
+                      setDirty(true);
+                    },
+                  },
+                )
+              }
             >
               <Sparkles className="size-4" />
-              {simulate.isPending ? "Simulando…" : "Generar estrategia con AI Team"}
+              {generateStrategy.isPending ? "Generando…" : "Generar estrategia con AI Team"}
             </Button>
             <Button
               disabled={!dirty || save.isPending}
@@ -332,6 +424,20 @@ function StrategyLabPage() {
         }
       />
 
+      {generateStrategy.isError ? (
+        <Card className="mb-5 border-l-[3px] border-l-critical">
+          <CardBody className="text-[13.5px] text-critical">
+            {generateStrategy.error instanceof Error
+              ? generateStrategy.error.message
+              : "No fue posible generar la estrategia"}
+          </CardBody>
+        </Card>
+      ) : null}
+      {!aiStatus.isLoading && aiStatus.data?.configured === false ? (
+        <Card className="mb-5 border-l-[3px] border-l-warning">
+          <CardBody className="text-[13.5px] font-semibold text-warning">IA no configurada</CardBody>
+        </Card>
+      ) : null}
       {strategy.data.aiStatus === "simulado" ? (
         <Card className="mb-5 border-l-[3px] border-l-info">
           <CardBody className="flex flex-wrap items-center gap-3">
@@ -346,7 +452,7 @@ function StrategyLabPage() {
       <Card>
         <CardHeader
           title="Estrategia del ciclo"
-          subtitle="Editable ahora; en V0.3 será propuesta por el AI Team y aprobada por ti."
+          subtitle="Edita y guarda la propuesta cuando esté lista. No se generan piezas de contenido aquí."
         />
         <CardBody className="grid gap-4 md:grid-cols-2">
           {fields.map((field) => (

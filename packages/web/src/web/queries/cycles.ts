@@ -35,5 +35,13 @@ export function useUpdateCycleObjective() {
 }
 
 export function usePreviewObjective() {
-  return useMutation(orpc.cycles.previewObjective.mutationOptions());
+  const queryClient = useQueryClient();
+  return useMutation(
+    orpc.cycles.previewObjective.mutationOptions({
+      onSettled: () => {
+        queryClient.invalidateQueries({ queryKey: orpc.cycles.key() });
+        queryClient.invalidateQueries({ queryKey: orpc.ai.key() });
+      },
+    }),
+  );
 }

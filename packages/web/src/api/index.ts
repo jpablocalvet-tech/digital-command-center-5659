@@ -7,6 +7,7 @@ import { team } from "./routes/team";
 import { strategy } from "./routes/strategy";
 import { hours } from "./routes/hours";
 import { cycles } from "./routes/cycles";
+import { ai } from "./routes/ai";
 
 // API features are oRPC procedures, one file per feature in ./routes/,
 // composed into this router — typed end-to-end via the clients
@@ -19,6 +20,7 @@ export const router = {
   strategy,
   hours,
   cycles,
+  ai,
 };
 
 export type AppRouter = typeof router;

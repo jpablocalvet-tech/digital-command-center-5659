@@ -4,6 +4,8 @@ import { ORPCError } from "@orpc/server";
 import { base } from "../__core/app";
 import { db } from "../database";
 import * as schema from "../database/schema";
+import { finishAIExecution, startAIExecution } from "../lib/ai/executions";
+import { AIProviderError, aiProvider } from "../lib/ai/provider";
 
 const statuses = ["Planificado", "Activo", "Cerrado"] as const;
 
@@ -91,6 +93,7 @@ export const cycles = {
           ...input,
           objectiveSource: "manual",
           objectiveStatus: input.objective.trim() ? "aprobado" : "borrador",
+          objectiveProposalStatus: input.objective.trim() ? "aprobado" : "sin propuesta",
         })
         .returning();
 
@@ -124,34 +127,157 @@ export const cycles = {
       return created;
     }),
 
-  /**
-   * Objective Builder V0.2: preview heurístico, NO IA real.
-   * Sirve para validar el flujo humano: prioridad de negocio → propuesta → aprobación.
-   * En V0.3 se sustituye por IA usando histórico, funnel, capacidad y estacionalidad.
-   */
   previewObjective: base
     .input(
       z.object({
+        clientId: z.number(),
+        cycleId: z.number(),
         businessGoal: z.string().min(3),
+        primaryMetric: z.string().default(""),
         baseline: z.string().default(""),
-        primaryMetric: z.string().default("Solicitudes cualificadas"),
       }),
     )
-    .handler(({ input }) => {
-      const noBaseline = !input.baseline.trim() || /sin|no hay|no existe/i.test(input.baseline);
-      return {
-        mode: "simulado" as const,
-        objective: noBaseline
-          ? `Avanzar la prioridad de negocio “${input.businessGoal}” y establecer una línea base real de ${input.primaryMetric.toLowerCase()} durante el ciclo.`
-          : `Avanzar la prioridad de negocio “${input.businessGoal}” mejorando ${input.primaryMetric.toLowerCase()} respecto a la línea base disponible.`,
-        primaryMetric: input.primaryMetric || "Solicitudes cualificadas",
-        target: noBaseline
-          ? "Establecer línea base; no fijar una meta numérica sin datos del primer ciclo"
-          : "Definir meta cuantitativa después de revisar la línea base y capacidad del ciclo",
-        rationale: noBaseline
-          ? "Como todavía no existe una línea base validada, inventar un número objetivo daría falsa precisión. El primer ciclo debe producir evidencia y medir el embudo."
-          : "La meta final debe considerar histórico, capacidad operativa y calidad del lead antes de fijar un número.",
-      };
+    .handler(async ({ input }) => {
+      const [client] = await db
+        .select()
+        .from(schema.clients)
+        .where(eq(schema.clients.id, input.clientId));
+      const [cycle] = await db
+        .select()
+        .from(schema.contentCycles)
+        .where(
+          and(
+            eq(schema.contentCycles.id, input.cycleId),
+            eq(schema.contentCycles.clientId, input.clientId),
+          ),
+        );
+      if (!client || !cycle) throw new ORPCError("NOT_FOUND", { message: "Cliente o ciclo no encontrado" });
+
+      const [clientCycles, clientContent, timeEntries, tasks] = await Promise.all([
+        db.select().from(schema.contentCycles).where(eq(schema.contentCycles.clientId, client.id)),
+        db.select().from(schema.contentItems).where(eq(schema.contentItems.clientId, client.id)),
+        db.select().from(schema.timeEntries).where(eq(schema.timeEntries.clientId, client.id)),
+        db.select().from(schema.manualTasks).where(eq(schema.manualTasks.clientId, client.id)),
+      ]);
+      const previousCycles = clientCycles
+        .filter((entry) => entry.id !== cycle.id)
+        .sort((a, b) => a.startDate.localeCompare(b.startDate))
+        .slice(-5);
+      const previousCycleIds = new Set(previousCycles.map((entry) => entry.id));
+      const currentItems = clientContent.filter((item) => item.cycleId === cycle.id);
+      const previousItems = clientContent.filter((item) => previousCycleIds.has(item.cycleId));
+      const currentMinutes = timeEntries
+        .filter((entry) => entry.cycleId === cycle.id)
+        .reduce((total, entry) => total + entry.minutes, 0);
+
+      const execution = await startAIExecution({
+        ...input,
+        agent: "Objective Builder",
+        action: "generateObjective",
+        metadata: {
+          historicalCycleCount: previousCycles.length,
+          priorContentCount: previousItems.length,
+          currentContentCount: currentItems.length,
+          founderMinutesRecorded: currentMinutes,
+        },
+      });
+      await db
+        .update(schema.contentCycles)
+        .set({
+          businessGoal: input.businessGoal,
+          primaryMetric: input.primaryMetric || cycle.primaryMetric,
+          baseline: input.baseline || cycle.baseline,
+          objectiveProposalStatus: "generando",
+        })
+        .where(eq(schema.contentCycles.id, cycle.id));
+
+      try {
+        const generated = await aiProvider.generateObjective({
+          client: {
+            name: client.name,
+            businessType: client.type,
+            service: client.service,
+            generalObjective: client.objective,
+            leads: client.leads,
+            scheduled: client.scheduled,
+            learning: client.learning,
+          },
+          cycle: {
+            ...cycle,
+            businessGoal: input.businessGoal,
+            primaryMetric: input.primaryMetric || cycle.primaryMetric,
+            baseline: input.baseline || cycle.baseline,
+          },
+          historicalCycles: previousCycles.map((previous) => ({
+            name: previous.name,
+            objective: previous.objective,
+            primaryMetric: previous.primaryMetric,
+            baseline: previous.baseline,
+            target: previous.target,
+            contentCount: previousItems.filter((item) => item.cycleId === previous.id).length,
+            publishedCount: previousItems.filter(
+              (item) => item.cycleId === previous.id && item.stage === "publicado",
+            ).length,
+          })),
+          results: {
+            previousContentCount: previousItems.length,
+            previousPublishedCount: previousItems.filter((item) => item.stage === "publicado").length,
+            previousApprovedCount: previousItems.filter((item) => item.approvalState === "aprobado").length,
+            currentContentCount: currentItems.length,
+            currentPublishedCount: currentItems.filter((item) => item.stage === "publicado").length,
+          },
+          capacity: {
+            targetContentCount: cycle.targetContentCount,
+            founderMinutesRecorded: currentMinutes,
+            founderHoursRecorded: Math.round((currentMinutes / 60) * 10) / 10,
+            monthlyTaskMinutes: tasks.reduce((total, task) => total + task.minutes * task.timesPerMonth, 0),
+          },
+        });
+        const baseline = input.baseline || cycle.baseline;
+        const hasBaseline =
+          /\d/.test(baseline) &&
+          !/(sin|no hay|no existe|no validada|por definir)/i.test(baseline);
+        const proposal = hasBaseline
+          ? generated
+          : {
+              ...generated,
+              objective: `Construir una línea base fiable de ${generated.primaryMetric} para medir el avance de la prioridad de negocio durante este ciclo.`,
+              successCriteria: [
+                `Registrar el valor inicial y final de ${generated.primaryMetric} con la misma definición.`,
+                "Documentar el volumen y la calidad de las solicitudes generadas durante el ciclo.",
+                "Identificar qué canales y acciones contribuyeron a los resultados para fijar una meta respaldada en el siguiente ciclo.",
+              ],
+              reasoning:
+                "No hay una línea base cuantitativa suficiente para fijar una meta numérica responsable. El primer ciclo debe medir resultados comparables y construir esa línea base.",
+              assumptions: [
+                "Se podrá registrar la métrica con la misma definición durante todo el ciclo.",
+                "El volumen por sí solo no representa la calidad de las solicitudes; también se revisará su cualificación.",
+              ],
+              confidenceNotes: [
+                "Histórico insuficiente: este ciclo sirve para construir una línea base, no para fijar metas numéricas.",
+                "La confianza de cualquier objetivo cuantitativo debe revisarse con datos del ciclo completo.",
+              ],
+            };
+
+        await db
+          .update(schema.contentCycles)
+          .set({
+            objectiveProposal: JSON.stringify(proposal),
+            objectiveProposalStatus: "propuesto",
+          })
+          .where(eq(schema.contentCycles.id, cycle.id));
+        await finishAIExecution(execution.id, "completado");
+        return proposal;
+      } catch (error) {
+        const message =
+          error instanceof AIProviderError ? error.message : "No fue posible generar la propuesta de objetivo";
+        await db
+          .update(schema.contentCycles)
+          .set({ objectiveProposalStatus: "error" })
+          .where(eq(schema.contentCycles.id, cycle.id));
+        await finishAIExecution(execution.id, "error", message);
+        throw new ORPCError("INTERNAL_SERVER_ERROR", { message });
+      }
     }),
 
   updateObjective: base
@@ -165,14 +291,13 @@ export const cycles = {
         target: z.string(),
         objectiveRationale: z.string(),
         objectiveSource: z.string().default("manual"),
-        objectiveStatus: z.string().default("aprobado"),
       }),
     )
     .handler(async ({ input }) => {
       const { id, ...patch } = input;
       const [updated] = await db
         .update(schema.contentCycles)
-        .set(patch)
+        .set({ ...patch, objectiveStatus: "aprobado", objectiveProposalStatus: "aprobado" })
         .where(eq(schema.contentCycles.id, id))
         .returning();
       if (!updated) throw new ORPCError("NOT_FOUND", { message: "Ciclo no encontrado" });

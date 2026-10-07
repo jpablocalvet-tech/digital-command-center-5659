@@ -42,6 +42,8 @@ export const contentCycles = sqliteTable("content_cycles", {
   objective: text("objective").notNull().default(""),
   objectiveSource: text("objective_source").notNull().default("manual"),
   objectiveStatus: text("objective_status").notNull().default("aprobado"),
+  objectiveProposal: text("objective_proposal").notNull().default(""),
+  objectiveProposalStatus: text("objective_proposal_status").notNull().default("sin propuesta"),
   primaryMetric: text("primary_metric").notNull().default(""),
   baseline: text("baseline").notNull().default(""),
   target: text("target").notNull().default(""),
@@ -112,7 +114,7 @@ export const approvalEvents = sqliteTable("approval_events", {
     .$defaultFn(() => new Date()),
 });
 
-/** AI Marketing Team. En V0.2 sigue siendo una simulación de estados. */
+/** Agentes del ciclo; los dos primeros agentes tienen ejecuciones reales en V0.3. */
 export const agents = sqliteTable("agents", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   clientId: integer("client_id").notNull(),
@@ -122,6 +124,21 @@ export const agents = sqliteTable("agents", {
   role: text("role").notNull().default(""),
   status: text("status").notNull().default("esperando"),
   lastAction: text("last_action").notNull().default(""),
+});
+
+/** Registro operativo de ejecuciones de IA; nunca almacena prompts ni secretos. */
+export const aiExecutions = sqliteTable("ai_executions", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  clientId: integer("client_id").notNull(),
+  cycleId: integer("cycle_id").notNull(),
+  agent: text("agent").notNull(),
+  action: text("action").notNull(),
+  status: text("status").notNull(),
+  startedAt: integer("started_at", { mode: "timestamp" }).notNull(),
+  completedAt: integer("completed_at", { mode: "timestamp" }),
+  model: text("model").notNull().default(""),
+  errorMessage: text("error_message").notNull().default(""),
+  metadata: text("metadata").notNull().default("{}"),
 });
 
 /** Founder Hours reales: cada entrada es un registro de tiempo. */

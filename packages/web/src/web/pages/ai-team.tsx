@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { CheckCircle2, RotateCcw, Sparkles } from "lucide-react";
+import { Link } from "wouter";
 import { Loader, PageHeader } from "../components/layout";
 import { Card, CardBody, CardHeader } from "../components/ui/card";
 import { AgentList } from "../components/panels";
@@ -7,6 +8,7 @@ import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
 import { useActiveClient } from "../components/active-client";
 import { useTeam } from "../queries/team";
+import { useContent, useGenerateContentBatch } from "../queries/content";
 import { useAIExecutions, useAIStatus } from "../queries/strategy";
 import { useCycle } from "../queries/cycles";
 import { useStrategy } from "../queries/strategy";
@@ -42,7 +44,9 @@ function AiTeamPage() {
   const cycle = useCycle(cycleId);
   const strategy = useStrategy(clientId, cycleId);
   const researchBrief = useResearchBrief(clientId, cycleId);
+  const content = useContent(clientId, cycleId);
   const generateBrief = useGenerateResearchBrief();
+  const generateContent = useGenerateContentBatch(clientId, cycleId);
   const reviewBrief = useReviewResearchBrief(clientId, cycleId);
   const [humanNote, setHumanNote] = useState("");
   const savedBrief = researchBrief.data;
@@ -53,13 +57,35 @@ function AiTeamPage() {
     Boolean(strategy.data?.audience.trim()) &&
     Boolean(strategy.data?.problems.trim()) &&
     Boolean(strategy.data?.pillars.trim());
+  const hasSavedStrategy =
+    Boolean(strategy.data?.audience.trim()) &&
+    Boolean(strategy.data?.problems.trim()) &&
+    Boolean(strategy.data?.pillars.trim());
+  const canGenerateContent =
+    clientId > 0 &&
+    cycleId > 0 &&
+    cycle.data?.clientId === clientId &&
+    cycle.data.objectiveStatus === "aprobado" &&
+    Boolean(cycle.data.objective.trim()) &&
+    hasSavedStrategy &&
+    savedBrief?.reviewStatus === "aprobado" &&
+    content.data?.length === 0;
+  const generatedBatch =
+    generateContent.data?.clientId === clientId &&
+    generateContent.data.cycleId === cycleId
+      ? generateContent.data
+      : undefined;
 
   useEffect(() => {
     setHumanNote(savedBrief?.humanNote ?? "");
   }, [savedBrief?.id, savedBrief?.humanNote]);
 
   const displayedAgents = team.data?.map((agent) => {
-    if (agent.name !== "Marketing Orchestrator" && agent.name !== "Research Agent") return agent;
+    if (
+      agent.name !== "Marketing Orchestrator" &&
+      agent.name !== "Research Agent" &&
+      agent.name !== "Content Agent"
+    ) return agent;
     const execution = executions.data?.find((item) => item.agent === agent.name);
     if (!execution) {
       return agent.name === "Research Agent"
@@ -119,7 +145,7 @@ function AiTeamPage() {
           subtitle="Estado y duración de las últimas operaciones de IA del ciclo."
         />
         <CardBody className="grid gap-3 md:grid-cols-2">
-          {["Objective Builder", "Marketing Orchestrator", "Research Agent"].map((agentName) => {
+          {["Objective Builder", "Marketing Orchestrator", "Research Agent", "Content Agent"].map((agentName) => {
             const execution = executions.data?.find((item) => item.agent === agentName);
             const elapsed = execution?.completedAt
               ? Math.max(
@@ -133,7 +159,7 @@ function AiTeamPage() {
               : null;
             const statusLabel =
               execution?.status === "generando"
-                ? "Generando"
+                ? "Trabajando"
                 : execution?.status === "completado"
                   ? "Completado"
                   : execution?.status === "error"
@@ -184,6 +210,75 @@ function AiTeamPage() {
                       <p className="mt-2 text-[12px] text-muted-foreground">
                         Requiere objetivo aprobado y estrategia guardada con audiencia, problemas y pilares.
                       </p>
+                    ) : null}
+                  </div>
+                ) : null}
+                {agentName === "Content Agent" ? (
+                  <div className="mt-3">
+                    <Button
+                      size="sm"
+                      disabled={
+                        !aiStatus.data?.configured ||
+                        !canGenerateContent ||
+                        content.isLoading ||
+                        generateContent.isPending
+                      }
+                      onClick={() => generateContent.mutate({ clientId, cycleId })}
+                    >
+                      <Sparkles className="size-4" />
+                      {generateContent.isPending
+                        ? "Generando…"
+                        : "Generar contenidos del ciclo"}
+                    </Button>
+                    {content.data && content.data.length > 0 && !generatedBatch ? (
+                      <p className="mt-2 text-[12px] text-muted-foreground">
+                        Este ciclo ya tiene piezas de contenido. Revísalas en Producción antes de generar un nuevo lote.
+                      </p>
+                    ) : cycle.isError ||
+                      strategy.isError ||
+                      researchBrief.isError ||
+                      content.isError ? (
+                      <p className="mt-2 text-[12px] text-critical">
+                        No fue posible comprobar los requisitos guardados del ciclo.
+                      </p>
+                    ) : cycle.isLoading ||
+                      strategy.isLoading ||
+                      researchBrief.isLoading ||
+                      content.isLoading ||
+                      !cycle.data ||
+                      !strategy.data ? (
+                      <p className="mt-2 text-[12px] text-muted-foreground">
+                        Comprobando requisitos guardados del ciclo…
+                      </p>
+                    ) : !cycle.data.objective.trim() || cycle.data.objectiveStatus !== "aprobado" ? (
+                      <p className="mt-2 text-[12px] text-muted-foreground">
+                        Requiere un objetivo del ciclo aprobado.
+                      </p>
+                    ) : !hasSavedStrategy ? (
+                      <p className="mt-2 text-[12px] text-muted-foreground">
+                        Requiere estrategia guardada con audiencia, problemas y pilares.
+                      </p>
+                    ) : savedBrief?.reviewStatus !== "aprobado" ? (
+                      <p className="mt-2 text-[12px] text-muted-foreground">
+                        Requiere que el Research Brief más reciente esté aprobado.
+                      </p>
+                    ) : null}
+                    {generateContent.isError ? (
+                      <p className="mt-2 text-[12.5px] text-critical">
+                        {generateContent.error instanceof Error
+                          ? generateContent.error.message
+                          : "No fue posible generar contenidos"}
+                      </p>
+                    ) : null}
+                    {generatedBatch ? (
+                      <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[12.5px]">
+                        <span className="text-success">
+                          {generatedBatch.createdCount} piezas creadas.
+                        </span>
+                        <Link to="/produccion" className="font-semibold text-primary hover:underline">
+                          Ver en Producción
+                        </Link>
+                      </div>
                     ) : null}
                   </div>
                 ) : null}

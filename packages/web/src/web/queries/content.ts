@@ -11,6 +11,23 @@ export function useContent(clientId: number, cycleId: number) {
   );
 }
 
+export function useGenerateContentBatch(clientId: number, cycleId: number) {
+  const queryClient = useQueryClient();
+  return useMutation(
+    orpc.content.generateBatch.mutationOptions({
+      onSuccess: () =>
+        Promise.all([
+          queryClient.invalidateQueries({
+            queryKey: orpc.content.list.key({ input: { clientId, cycleId } }),
+          }),
+          queryClient.invalidateQueries({
+            queryKey: orpc.ai.executions.key({ input: { clientId, cycleId } }),
+          }),
+        ]),
+    }),
+  );
+}
+
 export function useContentDetail(id: number) {
   return useQuery(orpc.content.detail.queryOptions({ input: { id }, enabled: id > 0 }));
 }

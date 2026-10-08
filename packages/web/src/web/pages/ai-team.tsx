@@ -8,7 +8,12 @@ import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
 import { useActiveClient } from "../components/active-client";
 import { useTeam } from "../queries/team";
-import { useContent, useGenerateContentBatch } from "../queries/content";
+import {
+  useContent,
+  useGenerateContentBatch,
+  useReviewBrandBatch,
+  useReviewRealityBatch,
+} from "../queries/content";
 import { useAIExecutions, useAIStatus } from "../queries/strategy";
 import { useCycle } from "../queries/cycles";
 import { useStrategy } from "../queries/strategy";
@@ -47,6 +52,8 @@ function AiTeamPage() {
   const content = useContent(clientId, cycleId);
   const generateBrief = useGenerateResearchBrief();
   const generateContent = useGenerateContentBatch(clientId, cycleId);
+  const reviewBrand = useReviewBrandBatch(clientId, cycleId);
+  const reviewReality = useReviewRealityBatch(clientId, cycleId);
   const reviewBrief = useReviewResearchBrief(clientId, cycleId);
   const [humanNote, setHumanNote] = useState("");
   const savedBrief = researchBrief.data;
@@ -84,11 +91,18 @@ function AiTeamPage() {
     if (
       agent.name !== "Marketing Orchestrator" &&
       agent.name !== "Research Agent" &&
-      agent.name !== "Content Agent"
+      agent.name !== "Content Agent" &&
+      agent.name !== "Brand Guardian" &&
+      agent.name !== "Reality Checker"
     ) return agent;
     const execution = executions.data?.find((item) => item.agent === agent.name);
     if (!execution) {
-      return agent.name === "Research Agent"
+      return [
+        "Research Agent",
+        "Content Agent",
+        "Brand Guardian",
+        "Reality Checker",
+      ].includes(agent.name)
         ? { ...agent, status: "esperando", lastAction: "Sin ejecución real todavía" }
         : agent;
     }
@@ -145,7 +159,14 @@ function AiTeamPage() {
           subtitle="Estado y duración de las últimas operaciones de IA del ciclo."
         />
         <CardBody className="grid gap-3 md:grid-cols-2">
-          {["Objective Builder", "Marketing Orchestrator", "Research Agent", "Content Agent"].map((agentName) => {
+          {[
+            "Objective Builder",
+            "Marketing Orchestrator",
+            "Research Agent",
+            "Content Agent",
+            "Brand Guardian",
+            "Reality Checker",
+          ].map((agentName) => {
             const execution = executions.data?.find((item) => item.agent === agentName);
             const elapsed = execution?.completedAt
               ? Math.max(
@@ -274,6 +295,78 @@ function AiTeamPage() {
                       <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[12.5px]">
                         <span className="text-success">
                           {generatedBatch.createdCount} piezas creadas.
+                        </span>
+                        <Link to="/produccion" className="font-semibold text-primary hover:underline">
+                          Ver en Producción
+                        </Link>
+                      </div>
+                    ) : null}
+                  </div>
+                ) : null}
+                {agentName === "Brand Guardian" ? (
+                  <div className="mt-3">
+                    <Button
+                      size="sm"
+                      disabled={
+                        !aiStatus.data?.configured ||
+                        !content.data?.length ||
+                        content.isLoading ||
+                        reviewBrand.isPending
+                      }
+                      onClick={() => reviewBrand.mutate({ clientId, cycleId })}
+                    >
+                      <Sparkles className="size-4" />
+                      {reviewBrand.isPending ? "Revisando…" : "Revisar marca del lote"}
+                    </Button>
+                    {reviewBrand.isError ? (
+                      <p className="mt-2 text-[12.5px] text-critical">
+                        {reviewBrand.error instanceof Error
+                          ? reviewBrand.error.message
+                          : "No fue posible revisar la marca del lote"}
+                      </p>
+                    ) : null}
+                    {reviewBrand.data?.clientId === clientId &&
+                    reviewBrand.data.cycleId === cycleId ? (
+                      <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[12.5px]">
+                        <span className="text-muted-foreground">
+                          {reviewBrand.data.approvedCount} aprobadas ·{" "}
+                          {reviewBrand.data.needsReviewCount} en revisión
+                        </span>
+                        <Link to="/produccion" className="font-semibold text-primary hover:underline">
+                          Ver en Producción
+                        </Link>
+                      </div>
+                    ) : null}
+                  </div>
+                ) : null}
+                {agentName === "Reality Checker" ? (
+                  <div className="mt-3">
+                    <Button
+                      size="sm"
+                      disabled={
+                        !aiStatus.data?.configured ||
+                        !content.data?.length ||
+                        content.isLoading ||
+                        reviewReality.isPending
+                      }
+                      onClick={() => reviewReality.mutate({ clientId, cycleId })}
+                    >
+                      <Sparkles className="size-4" />
+                      {reviewReality.isPending ? "Verificando…" : "Verificar afirmaciones"}
+                    </Button>
+                    {reviewReality.isError ? (
+                      <p className="mt-2 text-[12.5px] text-critical">
+                        {reviewReality.error instanceof Error
+                          ? reviewReality.error.message
+                          : "No fue posible verificar las afirmaciones"}
+                      </p>
+                    ) : null}
+                    {reviewReality.data?.clientId === clientId &&
+                    reviewReality.data.cycleId === cycleId ? (
+                      <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[12.5px]">
+                        <span className="text-muted-foreground">
+                          {reviewReality.data.verifiedCount} verificadas ·{" "}
+                          {reviewReality.data.needsConfirmationCount} con datos por confirmar
                         </span>
                         <Link to="/produccion" className="font-semibold text-primary hover:underline">
                           Ver en Producción

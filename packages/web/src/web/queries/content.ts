@@ -28,6 +28,37 @@ export function useGenerateContentBatch(clientId: number, cycleId: number) {
   );
 }
 
+function useReviewBatchMutation(
+  procedure:
+    | typeof orpc.content.reviewBrandBatch
+    | typeof orpc.content.reviewRealityBatch,
+  clientId: number,
+  cycleId: number,
+) {
+  const queryClient = useQueryClient();
+  return useMutation(
+    procedure.mutationOptions({
+      onSuccess: () =>
+        Promise.all([
+          queryClient.invalidateQueries({
+            queryKey: orpc.content.list.key({ input: { clientId, cycleId } }),
+          }),
+          queryClient.invalidateQueries({
+            queryKey: orpc.ai.executions.key({ input: { clientId, cycleId } }),
+          }),
+        ]),
+    }),
+  );
+}
+
+export function useReviewBrandBatch(clientId: number, cycleId: number) {
+  return useReviewBatchMutation(orpc.content.reviewBrandBatch, clientId, cycleId);
+}
+
+export function useReviewRealityBatch(clientId: number, cycleId: number) {
+  return useReviewBatchMutation(orpc.content.reviewRealityBatch, clientId, cycleId);
+}
+
 export function useContentDetail(id: number) {
   return useQuery(orpc.content.detail.queryOptions({ input: { id }, enabled: id > 0 }));
 }

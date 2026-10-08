@@ -20,6 +20,7 @@ function ApprovalRow({ item, onOpen }: { item: ContentRow; onOpen: () => void })
   const decide = useDecideContent();
   const [note, setNote] = useState("");
   const pending = decide.isPending && decide.variables?.id === item.id;
+  const canApprove = item.brandStatus === "Aprobado" && item.realityStatus === "Verificado";
 
   return (
     <Card>
@@ -86,7 +87,7 @@ function ApprovalRow({ item, onOpen }: { item: ContentRow; onOpen: () => void })
 
         <div className="mt-4 flex flex-wrap gap-2">
           <Button
-            disabled={decide.isPending}
+            disabled={decide.isPending || !canApprove}
             onClick={() =>
               decide.mutate(
                 { id: item.id, decision: "aprobar", note: note || undefined },
@@ -125,7 +126,12 @@ function ApprovalRow({ item, onOpen }: { item: ContentRow; onOpen: () => void })
             <Eye className="size-4" />
             Abrir contenido + historial
           </Button>
-          {item.realityStatus === "Dato por confirmar" ? (
+          {!canApprove ? (
+            <p className="basis-full text-[12.5px] text-muted-foreground">
+              Completa Brand Guardian y Reality Checker antes de aprobar.
+            </p>
+          ) : null}
+          {item.realityStatus === "Pendiente" ? (
             <Button
               variant="ghost"
               disabled={decide.isPending}

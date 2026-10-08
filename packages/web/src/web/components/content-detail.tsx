@@ -90,6 +90,8 @@ export function ContentDetailDialog({
   const detail = useContentDetail(id);
   const update = useUpdateContent();
   const decide = useDecideContent();
+  const item = detail.data?.item;
+  const canApprove = item?.brandStatus === "Aprobado" && item.realityStatus === "Verificado";
   const [values, setValues] = useState<Editable>(empty);
   const [dirty, setDirty] = useState(false);
   const [decisionNote, setDecisionNote] = useState("");
@@ -276,7 +278,7 @@ export function ContentDetailDialog({
                 />
                 <div className="mt-3 flex flex-wrap gap-2">
                   <Button
-                    disabled={decide.isPending}
+                    disabled={decide.isPending || !canApprove}
                     onClick={() =>
                       decide.mutate(
                         { id, decision: "aprobar", note: decisionNote || undefined },
@@ -311,18 +313,25 @@ export function ContentDetailDialog({
                   >
                     Rechazar
                   </Button>
-                  <Button
-                    variant="ghost"
-                    disabled={decide.isPending}
-                    onClick={() =>
-                      decide.mutate(
-                        { id, decision: "reality_check", note: decisionNote || undefined },
-                        { onSuccess: () => setDecisionNote("") },
-                      )
-                    }
-                  >
-                    Enviar a Reality Checker
-                  </Button>
+                  {item?.brandStatus !== "Aprobado" || item.realityStatus !== "Verificado" ? (
+                    <p className="basis-full text-[12.5px] text-muted-foreground">
+                      Completa Brand Guardian y Reality Checker antes de aprobar.
+                    </p>
+                  ) : null}
+                  {item?.realityStatus === "Pendiente" ? (
+                    <Button
+                      variant="ghost"
+                      disabled={decide.isPending}
+                      onClick={() =>
+                        decide.mutate(
+                          { id, decision: "reality_check", note: decisionNote || undefined },
+                          { onSuccess: () => setDecisionNote("") },
+                        )
+                      }
+                    >
+                      Enviar a Reality Checker
+                    </Button>
+                  ) : null}
                 </div>
               </div>
             ) : null}

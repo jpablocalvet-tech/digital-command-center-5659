@@ -72,3 +72,11 @@ scripts/
 !packages/mobile/scripts/
 packages/mobile/scripts/*
 !packages/mobile/scripts/generate-ios-certs.py
+
+# Sites build and local preview
+!scripts/
+!scripts/*.mjs
+hosting/assets.generated.ts
+.sites-runtime/
+.sites-preview/
+.wrangler/

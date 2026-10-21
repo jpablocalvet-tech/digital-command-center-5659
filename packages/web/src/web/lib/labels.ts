@@ -121,7 +121,7 @@ export const checkTones: Record<string, Tone> = {
   "Dato por confirmar": "warning",
 };
 
-export type Tone = "neutral" | "accent" | "warning" | "critical" | "info" | "primary";
+export type Tone = "neutral" | "accent" | "warning" | "critical" | "info" | "primary" | "success";
 
 
 export const approvalDecisionLabels: Record<string, string> = {

@@ -35,7 +35,7 @@ async function generateStrategy(clientId: number, cycleId: number) {
     .select()
     .from(schema.contentCycles)
     .where(and(eq(schema.contentCycles.clientId, clientId), eq(schema.contentCycles.id, cycleId)));
-  const strategy = await loadStrategy(clientId, cycleId);
+  await loadStrategy(clientId, cycleId);
   if (!client || !cycle) throw new ORPCError("NOT_FOUND", { message: "Cliente o ciclo no encontrado" });
   if (cycle.objectiveStatus !== "aprobado" || !cycle.objective.trim()) {
     throw new ORPCError("BAD_REQUEST", { message: "Aprueba un objetivo antes de generar la estrategia" });

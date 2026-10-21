@@ -18,6 +18,7 @@ import { useActiveClient } from "./active-client";
 
 const nav = [
   { href: "/", label: "Inicio", icon: Home },
+  { href: "/pipeline", label: "Pipeline comercial", icon: KanbanSquare },
   { href: "/clientes", label: "Clientes", icon: Users },
   { href: "/strategy-lab", label: "Strategy Lab", icon: FlaskConical },
   { href: "/ai-team", label: "AI Team", icon: Bot },
@@ -58,12 +59,12 @@ function Brand() {
   return (
     <div className="px-6 py-6">
       <p className="font-display text-[15px] font-extrabold leading-tight text-white">
-        Digital
+        TZALAM
         <br />
-        Command Center
+        Command
       </p>
       <p className="mt-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-white/45">
-        V0.2.1 · Core
+        Operación comercial
       </p>
     </div>
   );
@@ -184,6 +185,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
             <Menu className="size-4" />
           </button>
           <ClientAndCycleSwitcher />
+          <span className="shrink-0 text-xs text-muted-foreground">Propietario</span>
         </header>
         <main className="mx-auto w-full max-w-[1320px] flex-1 px-5 py-6 md:px-8 md:py-8">
           {children}

@@ -2,6 +2,7 @@ import { cn } from "@/lib/utils";
 import type { Tone } from "@/lib/labels";
 
 const tones: Record<Tone, string> = {
+  success: "bg-[#e6f4f1] text-[#0b6b61] border-[#c6e6e0]",
   neutral: "bg-surface-soft text-muted-foreground border-border",
   accent: "bg-[#e6f4f1] text-[#0b6b61] border-[#c6e6e0]",
   warning: "bg-[#fdf3e2] text-[#8f5e13] border-[#f2dfba]",

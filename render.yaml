@@ -1,0 +1,26 @@
+# Manual creation may use the same values. Keep main as the production branch.
+services:
+  - type: web
+    name: digital-command-center-5659
+    runtime: node
+    branch: main
+    plan: starter
+    buildCommand: bun install --frozen-lockfile --ignore-scripts && bun run build:render
+    startCommand: bun run start:render
+    healthCheckPath: /healthz
+    numInstances: 1
+    envVars:
+      - key: BUN_VERSION
+        value: 1.3.14
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        value: file:/var/data/tzalam.db
+      - key: OPERATOR_USERNAME
+        value: propietario
+      - key: OPERATOR_PASSWORD
+        sync: false
+    disk:
+      name: tzalam-data
+      mountPath: /var/data
+      sizeGB: 1

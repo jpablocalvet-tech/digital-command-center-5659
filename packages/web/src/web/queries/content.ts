@@ -82,15 +82,15 @@ export function useSetStage(clientId: number, cycleId: number) {
       onMutate: async ({ id, stage }: { id: number; stage: Stage }) => {
         await queryClient.cancelQueries({ queryKey: listKey });
         const prev = queryClient.getQueryData(listKey);
-        queryClient.setQueryData(listKey, (old: unknown) =>
+        queryClient.setQueryData(listKey, (old) =>
           Array.isArray(old)
-            ? old.map((item: { id: number }) => (item.id === id ? { ...item, stage } : item))
+            ? old.map((item) => (item.id === id ? { ...item, stage } : item))
             : old,
         );
         return { prev };
       },
       onError: (_error, _input, context) => {
-        queryClient.setQueryData(listKey, (context as { prev?: unknown } | undefined)?.prev);
+        queryClient.setQueryData(listKey, context?.prev);
       },
       onSettled: invalidate,
     }),

@@ -3,6 +3,7 @@ import { Provider } from "./components/provider";
 import { AgentFeedback, RunableBadge } from "@runablehq/website-runtime";
 import { ActiveClientProvider } from "./components/active-client";
 import { Layout } from "./components/layout";
+import Pipeline from "./pages/pipeline";
 import Index from "./pages/index";
 import Clientes from "./pages/clientes";
 import Cliente from "./pages/cliente";
@@ -30,6 +31,7 @@ function App() {
         <Layout>
           <Switch>
             <Route path="/" component={Index} />
+            <Route path="/pipeline" component={Pipeline} />
             <Route path="/clientes" component={Clientes} />
             <Route path="/clientes/:id" component={Cliente} />
             <Route path="/strategy-lab" component={StrategyLab} />

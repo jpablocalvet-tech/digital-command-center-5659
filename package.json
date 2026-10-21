@@ -9,7 +9,7 @@
     "dev": "cd packages/web && bunx vite",
     "dev:desktop": "cd packages/desktop && bunx vite",
     "dev:mobile": "cd packages/mobile && bunx expo start --port $(bun --print \"require('../../__ports.cjs').mobile\")",
-    "build": "turbo build",
+    "build": "bun run build:render",
     "build:web": "cd packages/web && bunx vite build",
     "start": "pm2 startOrRestart ecosystem.config.cjs --update-env",
     "stop": "pm2 delete web-app 2>/dev/null || true",
@@ -21,7 +21,11 @@
     "db:migrate": "turbo db:migrate",
     "db:push": "turbo db:push",
     "internal:kill-port": "lsof -t -i :$(bun --print \"require('./__ports.cjs').website\") | xargs kill -9",
-    "db:seed": "cd packages/web && bun --env-file=../../.env src/api/database/seed.ts"
+    "db:seed": "cd packages/web && bun --env-file=../../.env src/api/database/seed.ts",
+    "build:original": "turbo build",
+    "build:render": "cd packages/web && bun x tsc -p tsconfig.app.json --noEmit && bun x vite build --config vite.production.config.ts",
+    "start:render": "bun packages/web/deployment/start.ts",
+    "db:generate:production": "cd packages/web && bun x drizzle-kit generate --config drizzle.production.config.ts"
   },
   "devDependencies": {
     "@runablehq/runkit": "0.1.1",

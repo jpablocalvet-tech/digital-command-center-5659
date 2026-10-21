@@ -198,8 +198,7 @@ async function generateContentBatch(clientId: number, cycleId: number) {
   }
 
   try {
-    const savedItems = await db.transaction(async (tx) => {
-      const [existingItem] = await tx
+      const [existingItem] = await db
         .select({ id: schema.contentItems.id })
         .from(schema.contentItems)
         .where(
@@ -211,10 +210,8 @@ async function generateContentBatch(clientId: number, cycleId: number) {
         .limit(1);
       if (existingItem) throw new ContentBatchAlreadyExistsError();
 
-      const insertedItems = await tx
-        .insert(schema.contentItems)
-        .values(
-          batch.items.map((item) => ({
+    // Each insert stays below D1's parameter limit; batch is atomic on both adapters.
+    const inserts = batch.items.map((item) => db.insert(schema.contentItems).values({
             clientId,
             cycleId,
             type: item.type,
@@ -233,18 +230,12 @@ async function generateContentBatch(clientId: number, cycleId: number) {
             approvalState: "pendiente",
             brandStatus: "Pendiente",
             realityStatus: "Pendiente",
-          })),
-        )
-        .returning({ id: schema.contentItems.id });
-      if (insertedItems.length !== targetContentCount) {
-        throw new Error("No se guardaron todas las piezas del lote");
-      }
-      await tx
-        .update(schema.aiExecutions)
-        .set({ status: "completado", errorMessage: "", completedAt: new Date() })
-        .where(eq(schema.aiExecutions.id, execution.id));
-      return insertedItems;
-    });
+          }).returning({id: schema.contentItems.id}));
+    const results = await db.batch([
+      inserts[0]!, ...inserts.slice(1),
+      db.update(schema.aiExecutions).set({status:'completado',errorMessage:'',completedAt:new Date()}).where(eq(schema.aiExecutions.id,execution.id)),
+    ]);
+    const savedItems = results.slice(0, inserts.length).flat();
     return { clientId, cycleId, createdCount: savedItems.length };
   } catch (error) {
     const alreadyExists = error instanceof ContentBatchAlreadyExistsError;
@@ -262,18 +253,8 @@ async function generateContentBatch(clientId: number, cycleId: number) {
 async function loadQualityReviewContext(
   clientId: number,
   cycleId: number,
-  needsBrief: false,
-): Promise<{ items: typeof schema.contentItems.$inferSelect[]; context: BrandReviewContext }>;
-async function loadQualityReviewContext(
-  clientId: number,
-  cycleId: number,
-  needsBrief: true,
-): Promise<{ items: typeof schema.contentItems.$inferSelect[]; context: RealityReviewContext }>;
-async function loadQualityReviewContext(
-  clientId: number,
-  cycleId: number,
   needsBrief: boolean,
-) {
+): Promise<{items: typeof schema.contentItems.$inferSelect[]; context: BrandReviewContext | RealityReviewContext}> {
   const [[client], [cycle], [strategy], items] = await Promise.all([
     db.select().from(schema.clients).where(eq(schema.clients.id, clientId)),
     db
@@ -475,7 +456,7 @@ async function reviewContentBatch(
   let reviews;
   try {
     reviews = needsBrief
-      ? await aiProvider.reviewRealityBatch(context)
+      ? await aiProvider.reviewRealityBatch(context as RealityReviewContext)
       : await aiProvider.reviewBrandBatch(context);
     assertReviewIdsMatch(items, reviews.items);
     if (
@@ -507,8 +488,7 @@ async function reviewContentBatch(
   }
 
   try {
-    await db.transaction(async (tx) => {
-      for (const review of reviews.items) {
+    const updates = reviews.items.map((review) => {
         const original = items.find((item) => item.id === review.contentId)!;
         const values = needsBrief
           ? {
@@ -524,27 +504,9 @@ async function reviewContentBatch(
               brandReviewNotes: review.notes,
               updatedAt: new Date(),
             };
-        const [updated] = await tx
-          .update(schema.contentItems)
-          .set(values)
-          .where(
-            and(
-              eq(schema.contentItems.id, review.contentId),
-              eq(schema.contentItems.clientId, clientId),
-              eq(schema.contentItems.cycleId, cycleId),
-            ),
-          )
-          .returning({ id: schema.contentItems.id });
-        if (!updated) {
-          throw new Error("Una pieza del ciclo dejó de estar disponible durante la revisión");
-        }
-      }
-
-      await tx
-        .update(schema.aiExecutions)
-        .set({ status: "completado", errorMessage: "", completedAt: new Date() })
-        .where(eq(schema.aiExecutions.id, execution.id));
+        return db.update(schema.contentItems).set(values).where(and(eq(schema.contentItems.id,review.contentId),eq(schema.contentItems.clientId,clientId),eq(schema.contentItems.cycleId,cycleId)));
     });
+    await db.batch([updates[0]!, ...updates.slice(1), db.update(schema.aiExecutions).set({status:'completado',errorMessage:'',completedAt:new Date()}).where(eq(schema.aiExecutions.id,execution.id))]);
   } catch {
     const message = `No fue posible guardar todas las revisiones de ${agent}; los cambios se revirtieron.`;
     await finishAIExecution(execution.id, "error", message);

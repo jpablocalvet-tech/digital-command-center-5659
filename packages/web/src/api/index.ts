@@ -1,5 +1,6 @@
 import type { RouterClient } from "@orpc/server";
 import { createApp } from "./__core/app";
+import { pipeline } from "./routes/pipeline";
 import { ping } from "./routes/ping";
 import { clients } from "./routes/clients";
 import { content } from "./routes/content";
@@ -15,6 +16,7 @@ import { research } from "./routes/research";
 // (web: src/web/lib/api.ts, mobile: lib/api.ts).
 export const router = {
   ping,
+  pipeline,
   clients,
   content,
   team,

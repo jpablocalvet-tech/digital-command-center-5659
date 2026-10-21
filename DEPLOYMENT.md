@@ -1,0 +1,38 @@
+# TZALAM Command — Render production
+
+Recovered from digital-command-center-5659 main, c560f90 (V0.6 Quality Gate).
+React, Hono/oRPC, Drizzle/libSQL and all existing modules are retained.
+
+## Production
+
+Use this repository, branch main, with Render's native Node/Bun runtime.
+Build: `bun install --frozen-lockfile --ignore-scripts && bun run build:render`
+Start: `bun run start:render`
+Health: `/healthz` (only public endpoint; no business data).
+
+Persistent disk mounted at `/var/data`, 1 GB; single service instance.
+DATABASE_URL=file:/var/data/tzalam.db
+BUN_VERSION=1.3.14
+NODE_ENV=production
+OPERATOR_USERNAME=propietario
+OPERATOR_PASSWORD: set by the owner directly in Render, at least 20 characters.
+Do not paste secrets into chat, commit them or add them to client variables.
+
+Hono's built-in Basic Auth protects all HTML, assets and API routes. Chrome,
+Safari and mobile browsers show their native username/password prompt over
+HTTPS; no ChatGPT/Work session is involved. The browser keeps access during
+its session; close the browser session when leaving a shared device. Missing
+or short credentials prevent startup. Cross-origin writes are rejected.
+
+Startup applies tracked schema-only migrations and calls an idempotent bootstrap.
+It does not use the original destructive demonstration seed. Only known
+opportunities are inserted: Administración Residencial / GESTIÓN VISIBLE 90
+(target 14,900 MXN) and CASEM (value unknown). RUTA remains internal Client 000.
+No contacts or dates are invented, no messaging or prospecting is activated.
+Existing database records are never deleted by bootstrap. If an existing
+unjournaled database is attached, migration may refuse to start; inspect and
+back it up rather than resetting it.
+
+Local verification: `bun scripts/verify-render.ts`. Temporary records are only
+created in an isolated temporary database. Native production does not use the abandoned Sites adapter.
+AI gateway keys are optional and unconfigured. No new AI execution is enabled.

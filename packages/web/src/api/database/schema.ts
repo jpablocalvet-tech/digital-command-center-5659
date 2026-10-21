@@ -213,3 +213,25 @@ export const strategies = sqliteTable("strategies", {
     .notNull()
     .$defaultFn(() => new Date()),
 });
+
+/** Commercial opportunities; separate from active client delivery. Values in MXN. */
+export const opportunities = sqliteTable('opportunities', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  seedKey: text('seed_key').unique(),
+  business: text('business').notNull(),
+  segment: text('segment').notNull().default(''),
+  location: text('location').notNull().default(''),
+  contact: text('contact').notNull().default(''),
+  fit: text('fit').notNull().default(''),
+  priority: text('priority').notNull().default('Media'),
+  score: integer('score'),
+  offer: text('offer').notNull().default(''),
+  estimatedValue: integer('estimated_value'),
+  monthlyRevenue: integer('monthly_revenue').notNull().default(0),
+  state: text('state').notNull().default('Prospecto'),
+  lastContact: text('last_contact').notNull().default(''),
+  nextAction: text('next_action').notNull().default(''),
+  followUpDate: text('follow_up_date').notNull().default(''),
+  notes: text('notes').notNull().default(''),
+  updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull().$defaultFn(() => new Date()),
+});

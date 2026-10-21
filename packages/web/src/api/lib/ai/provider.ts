@@ -195,10 +195,10 @@ export function getAIConfig() {
   };
 }
 
-const secretPattern =
+export const secretPattern =
   /\b(?:sk|pk|rk)-[A-Za-z0-9_-]{12,}\b|\bBearer\s+\S+|[\w-]*(?:api[_ -]?key|token|password|secret|credential)[\w-]*\s*["']?\s*[:=]\s*["']?[^,"'\s}]+/i;
 
-function redactDiagnosticContent(content: string) {
+export function redactDiagnosticContent(content: string) {
   return content
     .replace(
       /("[\w-]*(?:api[_-]?key|token|password|secret|credential)[\w-]*"\s*:\s*")[^"]*(")/gi,

@@ -82,7 +82,7 @@ const emptyObjective: ObjectiveValues = {
 };
 
 function StrategyLabPage() {
-  const { clientId, cycleId } = useActiveClient();
+  const { clientId, cycleId, isLoading, isCycleLoading } = useActiveClient();
   const cycle = useCycle(cycleId);
   const strategy = useStrategy(clientId, cycleId);
   const save = useSaveStrategy();
@@ -123,11 +123,39 @@ function StrategyLabPage() {
     setObjectiveDirty(false);
   }, [cycle.data]);
 
-  if (!cycleId || cycle.isLoading || strategy.isLoading || !cycle.data || !strategy.data) {
+  if (cycle.isError || strategy.isError) {
+    return (
+      <>
+        <PageHeader title="Strategy Lab" />
+        <div role="alert" className="dcc-card p-6">
+          <p className="font-semibold">No se pudo cargar la estrategia del ciclo.</p>
+          <p className="mt-2 text-sm text-muted-foreground">
+            {cycle.error?.message || strategy.error?.message}
+          </p>
+          <Button className="mt-4" onClick={() => { cycle.refetch(); strategy.refetch(); }}>
+            Reintentar
+          </Button>
+        </div>
+      </>
+    );
+  }
+
+  if (isLoading || isCycleLoading || cycle.isLoading || strategy.isLoading) {
     return (
       <>
         <PageHeader title="Strategy Lab" />
         <Loader label={cycleId ? "Cargando estrategia…" : "Seleccionando ciclo…"} />
+      </>
+    );
+  }
+
+  if (!cycleId || !cycle.data || !strategy.data) {
+    return (
+      <>
+        <PageHeader title="Strategy Lab" />
+        <div className="dcc-card p-6 text-sm">
+          Selecciona un cliente con un ciclo disponible para abrir su estrategia.
+        </div>
       </>
     );
   }

@@ -8,6 +8,7 @@ import { createProductionApp } from './app';
 const app=createProductionApp(process.env.OPERATOR_USERNAME || '',process.env.OPERATOR_PASSWORD || '');
 if(!process.env.DATABASE_URL) throw new Error('DATABASE_URL is required; use the persistent disk.');
 await migrate(db,{migrationsFolder:resolve(import.meta.dirname,'../../../drizzle')});
-await bootstrap();
+const setup=await bootstrap();
+console.log(`Startup data check: ${setup.strategiesInitialized} missing strategy records initialized; existing data preserved.`);
 const server=Bun.serve({hostname:'0.0.0.0',port:Number(process.env.PORT || 3000),fetch:app.fetch});
 console.log(`TZALAM Command listening on port ${server.port}; owner authentication required.`);

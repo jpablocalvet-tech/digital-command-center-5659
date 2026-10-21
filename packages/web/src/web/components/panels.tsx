@@ -404,7 +404,7 @@ export function IntegrationsStrip() {
     <Card>
       <CardHeader
         title="Conexiones futuras"
-        subtitle="Preparado para conectar más adelante. Nada de esto está activo en V0.2."
+        subtitle="Integraciones externas pendientes de configuración y autorización."
       />
       <CardBody className="flex flex-wrap gap-2">
         {integrations.map((name) => (

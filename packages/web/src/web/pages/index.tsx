@@ -128,7 +128,7 @@ function Index() {
         <Card>
           <CardHeader
             title="AI Marketing Team"
-            subtitle="Todavía simulado en V0.2; la arquitectura ya está separada por ciclo."
+            subtitle="Agentes y ejecuciones del ciclo activo. La generación requiere un proveedor de IA configurado."
             action={
               <Link to="/ai-team" className="text-[12.5px] font-semibold text-primary hover:underline">
                 Ver detalle

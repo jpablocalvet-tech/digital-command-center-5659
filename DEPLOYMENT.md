@@ -38,3 +38,14 @@ back it up rather than resetting it.
 Local verification: `bun scripts/verify-render.ts`. Temporary records are only
 created in an isolated temporary database. Native production does not use the abandoned Sites adapter.
 AI gateway keys are optional and unconfigured. No new AI execution is enabled.
+
+## Strategy Lab startup repair
+
+The original production bootstrap inserted the RUTA cycle directly without the
+strategy record normally created by cycles.create. strategy.get then returned
+NOT_FOUND, while the page rendered that failure as perpetual loading. Startup
+now inserts empty strategies only for cycles missing one, retaining the cycle's
+existing objective and preserving every saved strategy. The page distinguishes
+loading, unavailable selection and failed requests, with an explicit retry.
+The verification script covers legacy missing records, idempotent repair, saved
+strategy preservation and strategy persistence across process restart.

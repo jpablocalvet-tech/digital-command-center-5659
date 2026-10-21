@@ -18,11 +18,13 @@ OPERATOR_USERNAME=propietario
 OPERATOR_PASSWORD: set by the owner directly in Render, at least 20 characters.
 Do not paste secrets into chat, commit them or add them to client variables.
 
-Hono's built-in Basic Auth protects all HTML, assets and API routes. Chrome,
-Safari and mobile browsers show their native username/password prompt over
-HTTPS; no ChatGPT/Work session is involved. The browser keeps access during
-its session; close the browser session when leaving a shared device. Missing
-or short credentials prevent startup. Cross-origin writes are rejected.
+The public /login page accepts the existing owner username/password via POST.
+Hono signs a 12-hour HS256 session; its cookie is Secure, HttpOnly, host-only
+and SameSite=Lax. APIs and assets reject missing, invalid or expired sessions.
+The password is only read from Render environment; no new secret is needed.
+Changing the password invalidates earlier sessions. Login/logout and data writes
+reject cross-origin requests. Render's canonical public URL is used behind the
+HTTPS proxy. Missing or short credentials prevent startup.
 
 Startup applies tracked schema-only migrations and calls an idempotent bootstrap.
 It does not use the original destructive demonstration seed. Only known

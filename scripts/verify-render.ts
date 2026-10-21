@@ -15,23 +15,32 @@ const {createORPCClient}=await import(require.resolve('@orpc/client'));
 const {RPCLink}=await import(require.resolve('@orpc/client/fetch'));
 await migrate(db,{migrationsFolder:'drizzle'});await bootstrap();
 const app=createProductionApp(process.env.OPERATOR_USERNAME!,process.env.OPERATOR_PASSWORD!);
-const auth='Basic '+btoa(process.env.OPERATOR_USERNAME+':'+process.env.OPERATOR_PASSWORD);
-const rpc=createORPCClient<any>(new RPCLink({url:'https://command.example/api/rpc',fetch:async(request:Request)=>app.request(request.url,{method:request.method,headers:{...Object.fromEntries(request.headers),Authorization:auth},body:['GET','HEAD'].includes(request.method)?undefined:await request.text()})}));
+const login=await app.request('https://command.example/login',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded',Origin:'https://command.example'},body:new URLSearchParams({username:process.env.OPERATOR_USERNAME!,password:process.env.OPERATOR_PASSWORD!}).toString()});
+assert.equal(login.status,303);const setCookie=login.headers.get('Set-Cookie')!;
+assert.match(setCookie,/HttpOnly/);assert.match(setCookie,/Secure/);assert.match(setCookie,/SameSite=Lax/);const auth=setCookie.split(';')[0];
+const rpc=createORPCClient<any>(new RPCLink({url:'https://command.example/api/rpc',fetch:async(request:Request)=>app.request(request.url,{method:request.method,headers:{...Object.fromEntries(request.headers),Cookie:auth},body:['GET','HEAD'].includes(request.method)?undefined:await request.text()})}));
 try{
   if(restart){const rows=await rpc.pipeline.list();assert.equal(rows.find((r:any)=>r.business==='PRUEBA LOCAL EFÍMERA').state,'Ganado');console.log('Restart persistence passed');}
   else {
     assert.throws(()=>createProductionApp('',''));
     assert.equal((await app.request('https://command.example/healthz')).status,200);
-    for(const path of ['/','/pipeline','/api/rpc/pipeline/list','/assets/missing.js']){const r=await app.request('https://command.example'+path);assert.equal(r.status,401);assert.match(r.headers.get('WWW-Authenticate')!,/Basic/);}
-    assert.equal((await app.request('https://command.example/',{headers:{Authorization:'Basic '+btoa('bad:bad')}})).status,401);
-    assert.equal((await app.request('https://command.example/',{headers:{Authorization:auth}})).status,200);
-    const csrf=await app.request('https://command.example/api/rpc/pipeline/create',{method:'POST',headers:{Authorization:auth,Origin:'https://other.example'}});assert.equal(csrf.status,403);
+    const loginPage=await app.request('https://command.example/login');assert.equal(loginPage.status,200);assert.match(await loginPage.text(),/Iniciar sesión/);
+    for(const path of ['/','/pipeline']){const r=await app.request('https://command.example'+path);assert.equal(r.status,303);assert.equal(r.headers.get('Location'),'/login');assert.equal(r.headers.get('WWW-Authenticate'),null);}
+    for(const path of ['/api/rpc/pipeline/list','/assets/missing.js'])assert.equal((await app.request('https://command.example'+path)).status,401);
+    const wrong=await app.request('https://command.example/login',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:'username=bad&password=bad'});assert.equal(wrong.status,401);assert.equal(wrong.headers.get('Set-Cookie'),null);
+    assert.equal((await app.request('https://command.example/',{headers:{Cookie:auth}})).status,200);
+    assert.equal((await app.request('https://command.example/api/rpc/pipeline/list',{headers:{Cookie:auth+'corrupted'}})).status,401);
+    const csrf=await app.request('https://command.example/api/rpc/pipeline/create',{method:'POST',headers:{Cookie:auth,Origin:'https://other.example'}});assert.equal(csrf.status,403);
+    assert.equal((await app.request('https://command.example/login',{method:'POST',headers:{Origin:'https://other.example'}})).status,403);
+    process.env.RENDER_EXTERNAL_URL='https://command.example';
+    const proxyLogin=await app.request('http://internal-render:10000/login',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded',Origin:'https://command.example'},body:new URLSearchParams({username:process.env.OPERATOR_USERNAME!,password:process.env.OPERATOR_PASSWORD!}).toString()});assert.equal(proxyLogin.status,303);
+    const logout=await app.request('https://command.example/logout',{method:'POST',headers:{Cookie:auth,Origin:'https://command.example'}});assert.equal(logout.status,303);assert.match(logout.headers.get('Set-Cookie')!,/Max-Age=0/);
     await bootstrap();let rows=await rpc.pipeline.list();assert.equal(rows.length,2);assert.equal(rows.find((r:any)=>r.business==='Administración Residencial').estimatedValue,14900);assert.equal(rows.find((r:any)=>r.business==='CASEM').estimatedValue,null);
     const draft={business:'PRUEBA LOCAL EFÍMERA',segment:'QA',location:'',contact:'',fit:'',priority:'Media',score:null,offer:'',estimatedValue:5000,monthlyRevenue:1000,state:'Prospecto',lastContact:'',nextAction:'Comprobar guardado',followUpDate:'2026-10-21',notes:''};
     const row=await rpc.pipeline.create(draft);await rpc.pipeline.update({...draft,id:row.id,state:'Ganado'});
     await assert.rejects(()=>rpc.pipeline.create({...draft,score:101}));await assert.rejects(()=>rpc.pipeline.create({...draft,followUpDate:'2026-02-31'}));
     assert.equal((await rpc.clients.list()).length,1);
     const child=Bun.spawn([process.execPath,'scripts/verify-render.ts','--restart'],{env:process.env,stdout:'inherit',stderr:'inherit'});assert.equal(await child.exited,0);
-    console.log(JSON.stringify({pass:true,checks:['native owner login','anonymous HTML/API/assets denied','wrong password denied','dashboard loads','cross-origin write denied','two real seeds without duplicates','create and edit','validation','persistent records after process restart']}));
+    console.log(JSON.stringify({pass:true,checks:['HTML owner login and secure session','anonymous HTML/API/assets denied','wrong password denied','dashboard loads','cross-origin write denied','two real seeds without duplicates','create and edit','validation','persistent records after process restart']}));
   }
 }finally{if(!restart)await rm(tmp,{recursive:true,force:true});}

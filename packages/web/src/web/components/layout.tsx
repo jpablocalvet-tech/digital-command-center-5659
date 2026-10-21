@@ -185,7 +185,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
             <Menu className="size-4" />
           </button>
           <ClientAndCycleSwitcher />
-          <span className="shrink-0 text-xs text-muted-foreground">Propietario</span>
+          <form action="/logout" method="post" className="shrink-0"><button type="submit" className="text-xs text-muted-foreground underline">Cerrar sesión</button></form>
         </header>
         <main className="mx-auto w-full max-w-[1320px] flex-1 px-5 py-6 md:px-8 md:py-8">
           {children}

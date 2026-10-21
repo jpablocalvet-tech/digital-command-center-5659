@@ -29,6 +29,9 @@ try{
     for(const path of ['/api/rpc/pipeline/list','/assets/missing.js'])assert.equal((await app.request('https://command.example'+path)).status,401);
     const wrong=await app.request('https://command.example/login',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:'username=bad&password=bad'});assert.equal(wrong.status,401);assert.equal(wrong.headers.get('Set-Cookie'),null);
     assert.equal((await app.request('https://command.example/',{headers:{Cookie:auth}})).status,200);
+    const html=await (await app.request('https://command.example/',{headers:{Cookie:auth}})).text();
+    const assetPaths=[...html.matchAll(/(?:src|href)="(\/assets\/[^"]+)"/g)].map(m=>m[1]);assert.ok(assetPaths.length>=2);
+    for(const assetPath of assetPaths){const response=await app.request('https://command.example'+assetPath,{headers:{Cookie:auth}});assert.equal(response.status,200);assert.match(response.headers.get('Content-Type')||'',assetPath.endsWith('.js')?/javascript/:/text\/css/);assert.ok((await response.arrayBuffer()).byteLength>0);}
     assert.equal((await app.request('https://command.example/api/rpc/pipeline/list',{headers:{Cookie:auth+'corrupted'}})).status,401);
     const csrf=await app.request('https://command.example/api/rpc/pipeline/create',{method:'POST',headers:{Cookie:auth,Origin:'https://other.example'}});assert.equal(csrf.status,403);
     assert.equal((await app.request('https://command.example/login',{method:'POST',headers:{Origin:'https://other.example'}})).status,403);

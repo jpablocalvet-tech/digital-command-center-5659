@@ -51,7 +51,7 @@ export function createProductionApp(username:string,password:string){
   app.get('*',async c=>{
     let pathname:string;try{pathname=decodeURIComponent(new URL(c.req.url).pathname);}catch{return c.text('Bad request',400);}
     const path=resolve(dist,'.'+pathname);if(path!==dist&&!path.startsWith(dist+sep))return c.text('Not found',404);
-    const asset=Bun.file(path);if(path!==dist&&await asset.exists())return new Response(asset);
+    const asset=Bun.file(path);if(path!==dist&&await asset.exists())return new Response(asset,{headers:{'Content-Type':asset.type||'application/octet-stream'}});
     if(pathname.split('/').pop()?.includes('.'))return c.text('Not found',404);
     return new Response(Bun.file(resolve(dist,'index.html')),{headers:{'Content-Type':'text/html; charset=utf-8'}});
   });

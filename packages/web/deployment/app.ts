@@ -3,8 +3,9 @@ import { getCookie, setCookie, deleteCookie } from 'hono/cookie';
 import { sign, verify } from 'hono/jwt';
 import { bodyLimit } from 'hono/body-limit';
 import { createHash, timingSafeEqual } from 'node:crypto';
-import { resolve, sep } from 'node:path';
+import { dirname, resolve, sep } from 'node:path';
 import api from '../src/api';
+import { createCanvaAuthorization } from './canva-authorization';
 
 const cookieName='__Host-tzalam_session';
 const sessionSeconds=12*60*60;
@@ -18,7 +19,7 @@ export function createProductionApp(username:string,password:string){
   const app=new Hono();const dist=resolve(import.meta.dirname,'../dist');
   const sessionKey=createHash('sha256').update('tzalam-owner-session-v1:'+password).digest('hex');
   const canonicalOrigin=(requestUrl:string)=>new URL(process.env.RENDER_EXTERNAL_URL||process.env.WEBSITE_URL||requestUrl).origin;
-  app.use('*',async(c,next)=>{await next();c.header('Cache-Control','private, no-store');c.header('X-Content-Type-Options','nosniff');c.header('Referrer-Policy','same-origin');c.header('Access-Control-Allow-Origin',undefined);c.header('Access-Control-Allow-Credentials',undefined);});
+  app.use('*',async(c,next)=>{await next();c.header('Cache-Control','private, no-store');c.header('X-Content-Type-Options','nosniff');c.header('Referrer-Policy',c.req.path.startsWith('/integraciones/canva')?'no-referrer':'same-origin');c.header('Access-Control-Allow-Origin',undefined);c.header('Access-Control-Allow-Credentials',undefined);});
   // Same-origin checks include login and logout, before processing credentials.
   app.use('*',async(c,next)=>{
     if(!['GET','HEAD','OPTIONS'].includes(c.req.method)){
@@ -47,6 +48,9 @@ export function createProductionApp(username:string,password:string){
     await next();
   });
   app.post('/logout',c=>{deleteCookie(c,cookieName,{path:'/',secure:true,httpOnly:true,sameSite:'Lax'});return c.redirect('/login',303);});
+  const databaseUrl=process.env.DATABASE_URL||'';
+  const canvaStorage=process.env.CANVA_STORAGE_DIR||(databaseUrl.startsWith('file:')?resolve(dirname(resolve(databaseUrl.slice(5))),'canva-authorization'):'');
+  app.route('/integraciones/canva',createCanvaAuthorization({clientId:process.env.CANVA_CLIENT_ID||'',clientSecret:process.env.CANVA_CLIENT_SECRET||'',publicOrigin:process.env.RENDER_EXTERNAL_URL||process.env.WEBSITE_URL||'',storageDir:canvaStorage,ownerSession:c=>getCookie(c,cookieName)||''}));
   app.all('/api/*',c=>api.fetch(c.req.raw));
   app.get('*',async c=>{
     let pathname:string;try{pathname=decodeURIComponent(new URL(c.req.url).pathname);}catch{return c.text('Bad request',400);}

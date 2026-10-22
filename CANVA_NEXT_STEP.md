@@ -1,7 +1,10 @@
-# Canva: next integration, not connected
+# Canva: authorization prepared, not connected
 
-No Canva OAuth flow, connector call, design creation, or account change has been
-performed. Production stability comes first. Subsequent order: Google Workspace,
+The owner selected their personal Canva Pro space containing TZALAM assets.
+No new team or copied files are authorized. The production authorization route
+is /integraciones/canva; it remains unconfigured until official credentials are
+registered in Canva and set by the owner directly in Render. No external OAuth
+grant, connector call, design creation, or account change has been performed. Production stability comes first. Subsequent order: Google Workspace,
 Meta, then WhatsApp/ManyChat.
 
 ## Reuse existing content and approvals
@@ -37,9 +40,28 @@ Canva's current official guide lists Pro, Teams and Enterprise (including eligib
 Education/Nonprofits). Confirm the selected account's actual entitlement before
 proposing any purchase. A chat Canva connector is not a server connection for
 Command: unattended operation from Command requires an authorized Canva REST API
-integration, OAuth consent and server-side token storage. Implement none of this
-until the owner is told the exact authorization action and authorizes that step.
-No new environment variables or permissions are needed for this preparation.
+integration, OAuth consent and server-side token storage. OAuth reception is now implemented with PKCE S256, a 10-minute single-use state
+bound to the owner session, and a protected callback at:
+https://digital-command-center-5659.onrender.com/integraciones/canva/callback
+
+Required Render variables, not yet configured: CANVA_CLIENT_ID and
+CANVA_CLIENT_SECRET. The owner must generate/paste the secret directly between
+Canva and Render; never share it in chat. No credentials are in this repository.
+Credentials grant no account access until the owner personally consents in Canva.
+If Canva shows a workspace selector, STOP and identify the existing personal Pro
+space holding TZALAM before selecting anything. Do not create another workspace.
+
+Tokens are exchanged only on the server and encrypted using AES-256-GCM. The
+private key and encrypted grant are stored with permissions 0600 in a private
+folder beside the persistent SQLite database. No tokens or remote errors appear
+in HTML or logs. An unsuccessful OAuth attempt preserves an earlier grant.
+No template/design/Brand Kit API requests are implemented in this preparation;
+no background jobs, synchronization, design duplication, or publishing is enabled.
+Refresh and design generation are subsequent work, not enabled by this change.
+
+The Canva Developer Portal and home page returned HTTP 503 on 2026-10-21, also
+confirmed by the owner in their personal browser. Account/integration discovery,
+registration and consent cannot be completed until that external error clears.
 
 Sources reviewed 2026-10-21:
 - https://www.canva.dev/docs/apps/rest-apis/autofill-guide/

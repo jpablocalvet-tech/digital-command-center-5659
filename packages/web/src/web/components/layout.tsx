@@ -10,6 +10,7 @@ import {
   Home,
   KanbanSquare,
   Menu,
+  Palette,
   Users,
   X,
 } from "lucide-react";
@@ -51,6 +52,10 @@ function NavLinks({ onNavigate }: { onNavigate?: () => void }) {
           </Link>
         );
       })}
+      <a href="/integraciones/canva" onClick={onNavigate} className="flex items-center gap-3 rounded-md px-3 py-2.5 text-[13.5px] font-medium text-white/65 hover:bg-white/8 hover:text-white">
+        <Palette className="size-4 shrink-0" strokeWidth={1.9} />
+        <span>Canva · conexión</span>
+      </a>
     </nav>
   );
 }

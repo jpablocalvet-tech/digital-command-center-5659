@@ -49,3 +49,16 @@ existing objective and preserving every saved strategy. The page distinguishes
 loading, unavailable selection and failed requests, with an explicit retry.
 The verification script covers legacy missing records, idempotent repair, saved
 strategy preservation and strategy persistence across process restart.
+
+## Canva authorization preparation
+
+Owner-only setup: /integraciones/canva. Optional CANVA_CLIENT_ID and
+CANVA_CLIENT_SECRET must be set directly in Render after registration in the
+existing Canva Pro account. Missing values leave the connection pending and do
+not affect existing modules. The registered HTTPS callback is
+/integraciones/canva/callback on the public production origin. PKCE, single-use
+state, owner-session binding and encrypted grant storage are verified by
+`bun scripts/verify-canva-authorization.ts` using mocked OAuth responses only.
+Grant files and the encryption key use permissions 0600 in a private directory
+beside /var/data/tzalam.db, never in the frontend or repository. No designs or
+workspaces are accessed by this preparation. See CANVA_NEXT_STEP.md.

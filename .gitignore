@@ -20,6 +20,8 @@ report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
 
 # local databases
 *.db
+# Private Canva grants and encryption key (including local development)
+canva-authorization/
 
 # dotenv environment variable files
 .env

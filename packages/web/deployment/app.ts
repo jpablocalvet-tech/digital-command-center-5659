@@ -19,7 +19,7 @@ export function createProductionApp(username:string,password:string){
   const app=new Hono();const dist=resolve(import.meta.dirname,'../dist');
   const sessionKey=createHash('sha256').update('tzalam-owner-session-v1:'+password).digest('hex');
   const canonicalOrigin=(requestUrl:string)=>new URL(process.env.RENDER_EXTERNAL_URL||process.env.WEBSITE_URL||requestUrl).origin;
-  app.use('*',async(c,next)=>{await next();c.header('Cache-Control','private, no-store');c.header('X-Content-Type-Options','nosniff');c.header('Referrer-Policy',c.req.path.startsWith('/integraciones/canva')?'no-referrer':'same-origin');c.header('Access-Control-Allow-Origin',undefined);c.header('Access-Control-Allow-Credentials',undefined);});
+  app.use('*',async(c,next)=>{await next();c.header('Cache-Control','private, no-store');c.header('X-Content-Type-Options','nosniff');c.header('Referrer-Policy',c.req.path.startsWith('/integraciones/canva')&&!['/integraciones/canva','/integraciones/canva/'].includes(c.req.path)?'no-referrer':'same-origin');c.header('Access-Control-Allow-Origin',undefined);c.header('Access-Control-Allow-Credentials',undefined);});
   // Same-origin checks include login and logout, before processing credentials.
   app.use('*',async(c,next)=>{
     if(!['GET','HEAD','OPTIONS'].includes(c.req.method)){

@@ -26,11 +26,13 @@ try{
     assert.throws(()=>createProductionApp('',''));
     assert.equal((await app.request('https://command.example/healthz')).status,200);
     const loginPage=await app.request('https://command.example/login');assert.equal(loginPage.status,200);assert.match(await loginPage.text(),/Iniciar sesión/);
-    for(const path of ['/','/pipeline','/integraciones/canva','/integraciones/canva/callback?state=forged&code=test']){const r=await app.request('https://command.example'+path);assert.equal(r.status,303);assert.equal(r.headers.get('Location'),'/login');assert.equal(r.headers.get('WWW-Authenticate'),null);}
+    for(const path of ['/','/pipeline','/integraciones/canva','/integraciones/canva/estudio','/integraciones/canva/estudio/pieces','/integraciones/canva/callback?state=forged&code=test']){const r=await app.request('https://command.example'+path);assert.equal(r.status,303);assert.equal(r.headers.get('Location'),'/login');assert.equal(r.headers.get('WWW-Authenticate'),null);}
     for(const path of ['/api/rpc/pipeline/list','/assets/missing.js'])assert.equal((await app.request('https://command.example'+path)).status,401);
     const wrong=await app.request('https://command.example/login',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:'username=bad&password=bad'});assert.equal(wrong.status,401);assert.equal(wrong.headers.get('Set-Cookie'),null);
     assert.equal((await app.request('https://command.example/',{headers:{Cookie:auth}})).status,200);
-    const canvaSetup=await app.request('https://command.example/integraciones/canva',{headers:{Cookie:auth}});assert.equal(canvaSetup.status,200);assert.match(await canvaSetup.text(),/Autorización pendiente de configuración/);assert.equal(canvaSetup.headers.get('Referrer-Policy'),'no-referrer');
+    const canvaSetup=await app.request('https://command.example/integraciones/canva',{headers:{Cookie:auth}});assert.equal(canvaSetup.status,200);assert.match(await canvaSetup.text(),/Autorización pendiente de configuración/);assert.equal(canvaSetup.headers.get('Referrer-Policy'),'same-origin');
+    const studio=await app.request('https://command.example/integraciones/canva/estudio',{headers:{Cookie:auth}});assert.equal(studio.status,200);assert.match(await studio.text(),/Estudio RUTA/);assert.equal(studio.headers.get('Referrer-Policy'),'no-referrer');
+    assert.equal((await app.request('https://command.example/integraciones/canva/estudio/pilot',{method:'POST',headers:{Cookie:auth,Origin:'https://attacker.invalid','Content-Type':'application/json'},body:'{}'})).status,403);
     assert.equal((await app.request('https://command.example/integraciones/canva/connect',{method:'POST',headers:{Cookie:auth,Origin:'https://other.example'}})).status,403);
     assert.equal((await app.request('https://command.example/integraciones/canva/callback?state=forged&code=test',{headers:{Cookie:auth}})).status,400);
     const html=await (await app.request('https://command.example/',{headers:{Cookie:auth}})).text();

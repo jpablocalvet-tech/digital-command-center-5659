@@ -4,10 +4,10 @@ import { createCipheriv, createDecipheriv, createHash, randomBytes } from 'node:
 import { mkdir, open, readFile, rename, unlink } from 'node:fs/promises';
 import { join } from 'node:path';
 
-// Canva REST authorization only. No design, template, Brand Kit or publishing calls.
+// Grants never leave the server. Production API calls share one refresh lock.
 export const canvaScopes = ['profile:read','design:meta:read','design:content:read','design:content:write','asset:read','asset:write','brandtemplate:meta:read','brandtemplate:content:read'];
 const escapeHtml = (value:string) => value.replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]!));
-type Config = {clientId:string;clientSecret:string;publicOrigin:string;storageDir:string;ownerSession:(c:Context)=>string;fetchImpl?:typeof fetch;now?:()=>number};
+export type CanvaConfig = {clientId:string;clientSecret:string;publicOrigin:string;storageDir:string;ownerSession:(c:Context)=>string;fetchImpl?:typeof fetch;now?:()=>number};
 type Grant = {access_token:string;refresh_token:string;token_type:string;expires_in:number;scope:string;connectedAt:number};
 
 /** Encrypt grants at rest. The private key and ciphertext stay on the persistent disk. */
@@ -37,7 +37,38 @@ class GrantStore {
   }
 }
 
-export function createCanvaAuthorization(config:Config){
+export class CanvaClient {
+  private queue: Promise<unknown> = Promise.resolve();
+  private store: GrantStore;
+  constructor(private config: CanvaConfig) { this.store = new GrantStore(config.storageDir); }
+  private exclusive<T>(fn:()=>Promise<T>):Promise<T> {
+    const result=this.queue.then(fn);this.queue=result.catch(()=>{});return result;
+  }
+  save(grant:Grant) { return this.exclusive(()=>this.store.write(grant)); }
+  private token(force=false):Promise<string> { return this.exclusive(async()=>{
+    if(!this.config.storageDir||!this.config.clientId||!this.config.clientSecret)throw new Error('CANVA_NOT_CONFIGURED');
+    const grant=await this.store.read();if(!grant)throw new Error('CANVA_CONNECT_REQUIRED');
+    const now=(this.config.now||Date.now)();
+    if(!force&&grant.connectedAt+grant.expires_in*1000>now+90000)return grant.access_token;
+    const response=await (this.config.fetchImpl||fetch)('https://api.canva.com/rest/v1/oauth/token',{method:'POST',redirect:'error',signal:AbortSignal.timeout(15000),headers:{Authorization:'Basic '+Buffer.from(this.config.clientId+':'+this.config.clientSecret).toString('base64'),'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams({grant_type:'refresh_token',refresh_token:grant.refresh_token})});
+    if(!response.ok)throw new Error(response.status===400||response.status===401?'CANVA_RECONNECT_REQUIRED':'CANVA_TEMPORARILY_UNAVAILABLE');
+    const next=await response.json() as Grant;
+    if(!next.access_token||!next.refresh_token||next.token_type?.toLowerCase()!=='bearer'||!Number.isFinite(next.expires_in)||next.expires_in<=0)throw new Error('CANVA_INVALID_RESPONSE');
+    await this.store.write({...next,scope:next.scope??grant.scope,connectedAt:now});return next.access_token;
+  }); }
+  async request(path:string,init:RequestInit={}) {
+    if(!/^\/[a-z0-9/?=&_-]+$/i.test(path))throw new Error('CANVA_INVALID_PATH');
+    let token=await this.token();
+    const send=()=>{const headers=new Headers(init.headers);headers.set('Authorization','Bearer '+token);return (this.config.fetchImpl||fetch)('https://api.canva.com/rest/v1'+path,{...init,headers,redirect:'error',signal:AbortSignal.timeout(20000)});};
+    let response=await send();
+    // Retry reads only: a mutation may have succeeded before its response failed.
+    if(response.status===401&&(!init.method||init.method==='GET')){token=await this.token(true);response=await send();}
+    if(!response.ok)throw new Error(response.status===401?'CANVA_RECONNECT_REQUIRED':response.status===403?'CANVA_PERMISSION_REQUIRED':response.status===429?'CANVA_RATE_LIMITED':'CANVA_REQUEST_FAILED');
+    return response.json();
+  }
+}
+
+export function createCanvaAuthorization(config:CanvaConfig,client=new CanvaClient(config)){
   const app=new Hono(),now=config.now||Date.now,request=config.fetchImpl||fetch,store=new GrantStore(config.storageDir);
   const pending=new Map<string,{verifier:string;owner:string;expires:number}>();
   const owner=(c:Context)=>createHash('sha256').update(config.ownerSession(c)).digest('hex');
@@ -47,7 +78,7 @@ export function createCanvaAuthorization(config:Config){
   app.use('*',async(c,next)=>{await next();c.header('Referrer-Policy','no-referrer');c.header('Cache-Control','private, no-store');});
   app.get('/',async c=>{
     if(!configured)return c.html(page('Autorización pendiente de configuración.'));
-    try{const grant=await store.read();return c.html(page(grant?'Autorización guardada. La selección de plantillas y la generación aún no están activadas.':configured?'Listo para que revises la autorización de Canva.':'Autorización pendiente de configuración.',Boolean(grant)));}
+    try{const grant=await store.read();return c.html(page(grant?'Autorización guardada; comprueba la conexión vigente en el estudio de producción.':configured?'Listo para que revises la autorización de Canva.':'Autorización pendiente de configuración.',Boolean(grant)).replace('<p>Esta etapa solo guarda', '<p><a href="/integraciones/canva/estudio">Abrir estudio de producción</a></p><p>Esta página solo guarda'));}
     catch{return c.html(page('No se pudo verificar la autorización guardada. No se ha reemplazado ni eliminado.'),503);}
   });
   app.post('/connect',c=>{
@@ -75,7 +106,7 @@ export function createCanvaAuthorization(config:Config){
       if(grant.scope===undefined)grant.scope=canvaScopes.join(' ');
       if(typeof grant.scope!=='string')throw new Error('Invalid scope response');
       const granted=new Set(grant.scope.split(' '));if(canvaScopes.some(scope=>!granted.has(scope)))throw new Error('Missing scopes');
-      await store.write({access_token:grant.access_token,refresh_token:grant.refresh_token,token_type:grant.token_type,expires_in:grant.expires_in,scope:grant.scope,connectedAt:now()});
+      await client.save({access_token:grant.access_token,refresh_token:grant.refresh_token,token_type:grant.token_type,expires_in:grant.expires_in,scope:grant.scope,connectedAt:now()});
       return c.redirect('/integraciones/canva',303);
     }catch{return c.html(page('No se pudo completar la autorización con Canva. No se muestran secretos ni se ha cambiado la conexión anterior.'),502);}
   });

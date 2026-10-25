@@ -23,7 +23,9 @@
     "internal:kill-port": "lsof -t -i :$(bun --print \"require('./__ports.cjs').website\") | xargs kill -9",
     "db:seed": "cd packages/web && bun --env-file=../../.env src/api/database/seed.ts",
     "build:original": "turbo build",
-    "build:render": "cd packages/web && bun x tsc -p tsconfig.app.json --noEmit && bun x vite build --config vite.production.config.ts",
+    "build:render": "bun run check:deployment && cd packages/web && bun x tsc -p tsconfig.app.json --noEmit && bun x vite build --config vite.production.config.ts",
+    "check:deployment": "bun x tsc --ignoreConfig --noEmit --moduleResolution bundler --module preserve --target ESNext --skipLibCheck --esModuleInterop --types bun packages/web/deployment/app.ts",
+    "verify:canva": "bun scripts/verify-canva-authorization.ts && bun scripts/verify-creative-studio.ts",
     "start:render": "bun packages/web/deployment/start.ts",
     "db:generate:production": "cd packages/web && bun x drizzle-kit generate --config drizzle.production.config.ts"
   },

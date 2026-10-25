@@ -5,7 +5,12 @@ import { bodyLimit } from 'hono/body-limit';
 import { createHash, timingSafeEqual } from 'node:crypto';
 import { dirname, resolve, sep } from 'node:path';
 import api from '../src/api';
-import { createCanvaAuthorization } from './canva-authorization';
+import { CanvaClient, createCanvaAuthorization } from './canva-authorization';
+import { createCreativeStudio } from './creative-studio';
+import { db } from '../src/api/database';
+import { clients, strategies, contentItems } from '../src/api/database/schema';
+import { eq, desc } from 'drizzle-orm';
+import { readFile } from 'node:fs/promises';
 
 const cookieName='__Host-tzalam_session';
 const sessionSeconds=12*60*60;
@@ -50,7 +55,16 @@ export function createProductionApp(username:string,password:string){
   app.post('/logout',c=>{deleteCookie(c,cookieName,{path:'/',secure:true,httpOnly:true,sameSite:'Lax'});return c.redirect('/login',303);});
   const databaseUrl=process.env.DATABASE_URL||'';
   const canvaStorage=process.env.CANVA_STORAGE_DIR||(databaseUrl.startsWith('file:')?resolve(dirname(resolve(databaseUrl.slice(5))),'canva-authorization'):'');
-  app.route('/integraciones/canva',createCanvaAuthorization({clientId:process.env.CANVA_CLIENT_ID||'',clientSecret:process.env.CANVA_CLIENT_SECRET||'',publicOrigin:process.env.RENDER_EXTERNAL_URL||process.env.WEBSITE_URL||'',storageDir:canvaStorage,ownerSession:c=>getCookie(c,cookieName)||''}));
+  const canvaConfig={clientId:process.env.CANVA_CLIENT_ID||'',clientSecret:process.env.CANVA_CLIENT_SECRET||'',publicOrigin:process.env.RENDER_EXTERNAL_URL||process.env.WEBSITE_URL||'',storageDir:canvaStorage,ownerSession:(c:import('hono').Context)=>getCookie(c,cookieName)||''};
+  const canva=new CanvaClient(canvaConfig);
+  app.route('/integraciones/canva/estudio',createCreativeStudio({storageDir:canvaStorage,canva,brand:async()=>({name:'RUTA',ink:'#1F4D4A',paper:'#F7F4EF',accent:'#B89A63',confirmed:false,logo:'data:image/png;base64,'+(await readFile(resolve(import.meta.dirname,'../public/ruta-logo.png'))).toString('base64')}),context:async()=>{
+    const all=await db.select().from(clients);const ruta=all.find(c=>c.name.toUpperCase().includes('RUTA'));
+    if(!ruta)return {brief:'RUTA no está registrada en Client Hub.',strategy:'',brandNotes:''};
+    const strategy=await db.select().from(strategies).where(eq(strategies.clientId,ruta.id)).orderBy(desc(strategies.id)).limit(1);
+    const content=await db.select({id:contentItems.id,title:contentItems.title,caption:contentItems.caption,visualBrief:contentItems.visualBrief}).from(contentItems).where(eq(contentItems.clientId,ruta.id)).orderBy(desc(contentItems.id)).limit(4);
+    return {clientId:ruta.id,brief:ruta.objective,brandNotes:JSON.stringify({voice:ruta.brandVoice,colors:ruta.brandColors,notes:ruta.brandNotes}),strategy:JSON.stringify(strategy[0]||{}),content};
+  }}));
+  app.route('/integraciones/canva',createCanvaAuthorization(canvaConfig,canva));
   app.all('/api/*',c=>api.fetch(c.req.raw));
   app.get('*',async c=>{
     let pathname:string;try{pathname=decodeURIComponent(new URL(c.req.url).pathname);}catch{return c.text('Bad request',400);}
